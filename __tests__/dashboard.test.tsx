@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Dashboard, mergeSnapshots } from "@/components/Dashboard";
 import type { ArrivalsResponse } from "@/lib/types";
@@ -17,6 +17,8 @@ const snapshot: ArrivalsResponse = {
 describe("Dashboard", () => {
   it("renders all three configured stops", () => {
     render(<Dashboard initialData={snapshot} />);
+    expect(screen.getByText("Upcoming RC4 events")).toBeInTheDocument();
+    expect(screen.getByLabelText("Rotating RC4 updates")).toBeInTheDocument();
     expect(screen.getByText("University Town")).toBeInTheDocument();
     expect(screen.getByText("UTown – RC4")).toBeInTheDocument();
     expect(screen.getByText("New Town Sec Sch")).toBeInTheDocument();
@@ -29,5 +31,14 @@ describe("Dashboard", () => {
     expect(merged.nus.stops[0].name).toBe("University Town");
     expect(merged.nus.stale).toBe(true);
     expect(merged.nus.error).toBe("down");
+  });
+
+  it("allows a publicity slide to be selected manually", () => {
+    const view = render(<Dashboard initialData={snapshot} />);
+    const dashboard = within(view.container);
+    const deadlineButton = dashboard.getByRole("button", { name: "Show Sign-up deadlines" });
+    fireEvent.click(deadlineButton);
+    expect(dashboard.getByText("Sign-up deadlines")).toBeInTheDocument();
+    expect(deadlineButton).toHaveAttribute("aria-pressed", "true");
   });
 });

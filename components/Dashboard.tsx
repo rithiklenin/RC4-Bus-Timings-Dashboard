@@ -1,9 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DASHBOARD_CONFIG } from "@/lib/dashboard-config";
 import type { Arrival, ArrivalsResponse, BusService, BusStop, SourceResult } from "@/lib/types";
 
-const REFRESH_MS = 20_000;
+const PUBLICITY_ITEMS = [
+  {
+    eyebrow: "CSC publicity",
+    title: "Upcoming RC4 events",
+    description: "A rotating space for committee posters, event details and venue information.",
+    note: "Designed for content supplied by CSC",
+  },
+  {
+    eyebrow: "Time-sensitive",
+    title: "Sign-up deadlines",
+    description: "Important registration windows stay visible without crowding the live transport panel.",
+    note: "Expired notices can be removed automatically",
+  },
+  {
+    eyebrow: "College updates",
+    title: "Selected RC4 announcements",
+    description: "A focused channel for relevant notices, reminders and community opportunities.",
+    note: "Curated for quick-glance viewing",
+  },
+] as const;
 
 function mergeSource(previous: SourceResult | undefined, incoming: SourceResult): SourceResult {
   if (incoming.status === "ok" || !previous?.stops.length) return incoming;
@@ -157,6 +177,45 @@ function ErrorPanel({ title, error, featured = false }: { title: string; error?:
   );
 }
 
+function PublicityPanel() {
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    const rotation = window.setInterval(() => {
+      setActiveIndex((current) => (current + 1) % PUBLICITY_ITEMS.length);
+    }, DASHBOARD_CONFIG.publicityRotationMs);
+    return () => window.clearInterval(rotation);
+  }, []);
+
+  const item = PUBLICITY_ITEMS[activeIndex];
+
+  return (
+    <section className="publicity-panel" aria-label="Rotating RC4 updates" aria-live="polite">
+      <div className="publicity-copy" key={item.title}>
+        <div className="eyebrow">{item.eyebrow}</div>
+        <h2>{item.title}</h2>
+        <p>{item.description}</p>
+        <span className="publicity-note">{item.note}</span>
+      </div>
+      <div className="publicity-meta">
+        <span>RC4 highlights</span>
+        <div className="publicity-dots" aria-label="Select RC4 highlight">
+          {PUBLICITY_ITEMS.map((entry, index) => (
+            <button
+              type="button"
+              className={index === activeIndex ? "active" : ""}
+              aria-label={`Show ${entry.title}`}
+              aria-pressed={index === activeIndex}
+              onClick={() => setActiveIndex(index)}
+              key={entry.title}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function Dashboard({ initialData = null }: { initialData?: ArrivalsResponse | null }) {
   const [data, setData] = useState<ArrivalsResponse | null>(initialData);
   const [now, setNow] = useState(() => new Date());
@@ -188,7 +247,7 @@ export function Dashboard({ initialData = null }: { initialData?: ArrivalsRespon
   useEffect(() => {
     const clock = window.setInterval(() => setNow(new Date()), 1_000);
     const initialRefresh = !initialData ? window.setTimeout(() => void refresh(), 0) : undefined;
-    const polling = window.setInterval(() => void refresh(), REFRESH_MS);
+    const polling = window.setInterval(() => void refresh(), DASHBOARD_CONFIG.arrivalsRefreshMs);
     return () => {
       window.clearInterval(clock);
       window.clearInterval(polling);
@@ -221,9 +280,12 @@ export function Dashboard({ initialData = null }: { initialData?: ArrivalsRespon
       </header>
 
       <div className="dashboard-grid">
-        {nusStop && data ? <StopPanel stop={nusStop} source={data.nus} featured />
-          : data?.nus.status === "error" ? <ErrorPanel title="University Town" error={data.nus.error} featured />
-          : <SkeletonPanel featured />}
+        <div className="main-column">
+          <PublicityPanel />
+          {nusStop && data ? <StopPanel stop={nusStop} source={data.nus} />
+            : data?.nus.status === "error" ? <ErrorPanel title="University Town" error={data.nus.error} />
+            : <SkeletonPanel />}
+        </div>
 
         <div className="public-column">
           <div className="column-heading"><span>Nearby public buses</span><i /></div>
