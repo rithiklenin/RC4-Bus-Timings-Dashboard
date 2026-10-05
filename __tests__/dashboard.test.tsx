@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { Dashboard, mergeSnapshots } from "@/components/Dashboard";
+import { DASHBOARD_CONFIG } from "@/lib/dashboard-config";
 import type { ArrivalsResponse } from "@/lib/types";
 
 const snapshot: ArrivalsResponse = {
@@ -11,6 +12,8 @@ const snapshot: ArrivalsResponse = {
   publicBus: { status: "ok", stale: false, updatedAt: "2026-10-01T04:00:00.000Z", stops: [
     { id: "19059", name: "UTown – RC4", kind: "public", services: [{ serviceNo: "196", arrivals: [{ minutes: 1, estimatedAt: null, load: "limited", wheelchair: true, vehicleType: "double", monitored: true }] }] },
     { id: "19051", name: "New Town Sec Sch", kind: "public", services: [] },
+    { id: "17099", name: "UTown – Cendana", kind: "public", services: [] },
+    { id: "17091", name: "Aft Clementi Ave 1", kind: "public", services: [] },
   ] },
 };
 
@@ -23,6 +26,27 @@ describe("Dashboard", () => {
     expect(screen.getByText("UTown – RC4")).toBeInTheDocument();
     expect(screen.getByText("New Town Sec Sch")).toBeInTheDocument();
     expect(screen.getByLabelText("Bus D1")).toBeInTheDocument();
+  });
+
+  it("rotates between pages of public bus stops", () => {
+    vi.useFakeTimers();
+    try {
+      const view = within(render(<Dashboard initialData={snapshot} />).container);
+      const pageOf = (name: string) => view.getByText(name).closest(".public-page");
+      expect(pageOf("UTown – RC4")).toHaveClass("is-active");
+      expect(pageOf("New Town Sec Sch")).toHaveClass("is-active");
+      expect(pageOf("UTown – Cendana")).not.toHaveClass("is-active");
+
+      act(() => vi.advanceTimersByTime(DASHBOARD_CONFIG.publicStopsRotationMs));
+      expect(pageOf("UTown – Cendana")).toHaveClass("is-active");
+      expect(pageOf("Aft Clementi Ave 1")).toHaveClass("is-active");
+      expect(pageOf("UTown – RC4")).not.toHaveClass("is-active");
+
+      act(() => vi.advanceTimersByTime(DASHBOARD_CONFIG.publicStopsRotationMs));
+      expect(pageOf("UTown – RC4")).toHaveClass("is-active");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps last successful data when one source fails", () => {

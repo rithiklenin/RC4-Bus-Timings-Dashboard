@@ -1,11 +1,9 @@
+import { PUBLIC_STOP_PAGES } from "@/lib/dashboard-config";
 import type { Arrival, BusService, BusStop, LoadLevel, VehicleType } from "@/lib/types";
 
 const LTA_URL = "https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival";
 
-export const PUBLIC_STOPS = [
-  { id: "19059", name: "UTown – RC4" },
-  { id: "19051", name: "New Town Sec Sch" },
-] as const;
+export const PUBLIC_STOPS = PUBLIC_STOP_PAGES.flat();
 
 interface LtaBus {
   EstimatedArrival?: string;
@@ -76,7 +74,7 @@ export async function fetchPublicBusStops(now = new Date()): Promise<BusStop[]> 
   const accountKey = process.env.LTA_ACCOUNT_KEY;
   if (!accountKey) throw new Error("LTA AccountKey is not configured");
 
-  return Promise.all(
+  const results = await Promise.allSettled(
     PUBLIC_STOPS.map(async (stop) => {
       const response = await fetch(`${LTA_URL}?BusStopCode=${stop.id}`, {
         headers: { AccountKey: accountKey, accept: "application/json" },
@@ -87,4 +85,12 @@ export async function fetchPublicBusStops(now = new Date()): Promise<BusStop[]> 
       return normalizeLtaStop(stop, (await response.json()) as LtaResponse, now);
     }),
   );
+
+  // One failing stop should not hide the others; only fail the source when every stop fails.
+  const stops = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+  if (!stops.length) {
+    const firstFailure = results.find((result) => result.status === "rejected");
+    throw firstFailure?.reason ?? new Error("LTA returned no stops");
+  }
+  return stops;
 }

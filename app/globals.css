@@ -76,9 +76,17 @@ button, input { font: inherit; }
 .stop-featured { padding: clamp(26px,2.4vw,46px); }
 .stop-featured::after { content: ""; position: absolute; width: 320px; height: 320px; right: -190px; top: -190px; border: 1px solid rgba(91,188,246,.1); border-radius: 50%; box-shadow: 0 0 0 55px rgba(91,188,246,.025), 0 0 0 110px rgba(91,188,246,.018); pointer-events: none; }
 .stop-secondary { padding: 23px 25px 18px; min-height: 0; }
-.public-column { display: grid; grid-template-rows: auto 1fr 1fr; gap: 14px; min-height: 0; }
-.column-heading { height: 25px; display: flex; justify-content: space-between; align-items: center; color: var(--muted); text-transform: uppercase; font-size: 10px; font-weight: 700; letter-spacing: .15em; padding: 0 4px; }
+.public-column { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 14px; min-height: 0; }
+.column-heading { height: 25px; display: flex; justify-content: space-between; align-items: center; gap: 16px; color: var(--muted); text-transform: uppercase; font-size: 10px; font-weight: 700; letter-spacing: .15em; padding: 0 4px; }
 .column-heading i { width: 35%; height: 1px; background: var(--line); }
+.column-heading:has(.page-dots) i { flex: 1; width: auto; }
+.page-dots { display: flex; gap: 5px; }
+.page-dots span { width: 12px; height: 5px; border-radius: 99px; background: rgba(255,255,255,.18); transition: width .4s ease, background .4s ease; }
+.page-dots span.active { width: 24px; background: var(--blue); box-shadow: 0 0 8px rgba(91,188,246,.4); }
+/* Pages are stacked in one grid cell; the outgoing page fades out before the incoming one fades in. */
+.public-pages { display: grid; min-height: 0; }
+.public-page { grid-area: 1 / 1; display: grid; grid-template-rows: 1fr 1fr; gap: 14px; min-height: 0; opacity: 0; visibility: hidden; transform: scale(.985); transition: opacity .45s ease, transform .45s ease, visibility 0s linear .45s; }
+.public-page.is-active { opacity: 1; visibility: visible; transform: none; transition: opacity .6s ease .3s, transform .6s ease .3s, visibility 0s; }
 .stop-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: clamp(20px,2.1vw,38px); }
 .stop-secondary .stop-header { margin-bottom: 16px; }
 .eyebrow { color: var(--cyan); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .16em; margin-bottom: 9px; }
@@ -122,14 +130,14 @@ footer { display: flex; align-items: center; gap: 20px; height: 48px; color: var
 @media (max-width: 1050px) {
   .dashboard-grid { grid-template-columns: 1fr; }
   .main-column { grid-template-rows: minmax(270px, auto) minmax(590px, auto); }
-  .public-column { grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; }.column-heading { grid-column: 1 / -1; }
+  .public-page { grid-template-columns: 1fr 1fr; grid-template-rows: none; }
   .stop-featured { min-height: 590px; }.topbar-center { display: none; }
 }
 @media (max-width: 700px) {
   .dashboard-shell { padding: 20px 14px; }.topbar { grid-template-columns: 1fr auto; }.brand p { display: none; }.clock strong { font-size: 25px; }.clock span { font-size: 9px; }
   .main-column { display: flex; flex-direction: column; }.publicity-panel { grid-template-columns: 1fr; padding: 30px 24px; }.publicity-meta { align-items: flex-start; text-align: left; }.publicity-copy h2 { font-size: 38px; }
-  .public-column { display: flex; flex-direction: column; }.stop-featured { min-height: auto; padding: 24px 18px; }
+  .public-column, .public-page { display: flex; flex-direction: column; }.stop-featured { min-height: auto; padding: 24px 18px; }
   .service-labels { display: none; }.service-row,.service-row-compact { grid-template-columns: 58px 1fr; padding: 13px 4px; }.service-row-compact { grid-template-columns: 50px 1fr; }.load-block { grid-column: 2; }.arrival-list { gap: 15px; }.arrival-primary strong { font-size: 34px; }
   footer { flex-wrap: wrap; height: auto; padding: 18px 4px; } footer p { width: 100%; margin: 0; }
 }
-@media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+@media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } .public-page { transform: none; transition-duration: .01ms !important; transition-delay: 0s !important; } }

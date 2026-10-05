@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DASHBOARD_CONFIG } from "@/lib/dashboard-config";
+import { DASHBOARD_CONFIG, PUBLIC_STOP_PAGES } from "@/lib/dashboard-config";
 import type { Arrival, ArrivalsResponse, BusService, BusStop, SourceResult } from "@/lib/types";
 
 const PUBLICITY_ITEMS = [
@@ -216,6 +216,56 @@ function PublicityPanel() {
   );
 }
 
+function PublicStopsColumn({ data }: { data: ArrivalsResponse | null }) {
+  const [activePage, setActivePage] = useState(0);
+
+  const pages = useMemo(() => {
+    const stops = data?.publicBus.stops ?? [];
+    return PUBLIC_STOP_PAGES
+      .map((page) => page.map(({ id }) => stops.find((stop) => stop.id === id)).filter((stop): stop is BusStop => Boolean(stop)))
+      .filter((page) => page.length > 0);
+  }, [data]);
+
+  const pageCount = pages.length;
+  useEffect(() => {
+    if (pageCount < 2) return;
+    const rotation = window.setInterval(() => {
+      setActivePage((current) => (current + 1) % pageCount);
+    }, DASHBOARD_CONFIG.publicStopsRotationMs);
+    return () => window.clearInterval(rotation);
+  }, [pageCount]);
+
+  const visiblePage = pageCount ? activePage % pageCount : 0;
+
+  return (
+    <div className="public-column">
+      <div className="column-heading">
+        <span>Nearby public buses</span><i />
+        {pageCount > 1 && (
+          <div className="page-dots" aria-hidden="true">
+            {pages.map((page, index) => <span key={page[0].id} className={index === visiblePage ? "active" : ""} />)}
+          </div>
+        )}
+      </div>
+      <div className="public-pages">
+        {data && pageCount ? pages.map((page, index) => (
+          <div
+            className={`public-page ${index === visiblePage ? "is-active" : ""}`}
+            aria-hidden={index !== visiblePage}
+            key={page[0].id}
+          >
+            {page.map((stop) => <StopPanel key={stop.id} stop={stop} source={data.publicBus} />)}
+          </div>
+        )) : data?.publicBus.status === "error" ? (
+          <div className="public-page is-active"><ErrorPanel title="Public bus timings" error={data.publicBus.error} /></div>
+        ) : !data && (
+          <div className="public-page is-active"><SkeletonPanel /><SkeletonPanel /></div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard({ initialData = null }: { initialData?: ArrivalsResponse | null }) {
   const [data, setData] = useState<ArrivalsResponse | null>(initialData);
   const [now, setNow] = useState(() => new Date());
@@ -255,10 +305,6 @@ export function Dashboard({ initialData = null }: { initialData?: ArrivalsRespon
     };
   }, [initialData, refresh]);
 
-  const publicStops = useMemo(() => {
-    const stops = data?.publicBus.stops ?? [];
-    return ["19059", "19051"].map((id) => stops.find((stop) => stop.id === id)).filter((stop): stop is BusStop => Boolean(stop));
-  }, [data]);
   const nusStop = data?.nus.stops[0];
 
   return (
@@ -287,14 +333,7 @@ export function Dashboard({ initialData = null }: { initialData?: ArrivalsRespon
             : <SkeletonPanel />}
         </div>
 
-        <div className="public-column">
-          <div className="column-heading"><span>Nearby public buses</span><i /></div>
-          {publicStops.map((stop) => data && <StopPanel key={stop.id} stop={stop} source={data.publicBus} />)}
-          {!publicStops.length && data?.publicBus.status === "error" && (
-            <ErrorPanel title="Public bus timings" error={data.publicBus.error} />
-          )}
-          {!data && <><SkeletonPanel /><SkeletonPanel /></>}
-        </div>
+        <PublicStopsColumn data={data} />
       </div>
 
       <footer>
