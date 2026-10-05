@@ -1,12 +1,15 @@
 # RC4 Bus Timings Dashboard
 
-An always-on, 16:9 bus arrival board for Residential College 4. It combines:
+An always-on, 16:9 smart display for Residential College 4. It combines rotating RC4 publicity with persistent live transport information:
 
+- A rotating panel for CSC publicity, RC4 events, sign-up deadlines and selected announcements
 - NUS shuttle arrivals at University Town (`UTOWN`)
 - LTA public buses at UTown – RC4 (`19059`)
 - LTA public buses at New Town Sec Sch (`19051`)
 
-The dashboard refreshes every 20 seconds, keeps the last successful timings through transient outages, and shows independent health states for the NUS and LTA feeds.
+The publicity panel rotates once per minute, and its slide indicators can be clicked for manual testing. The transport dashboard refreshes every 20 seconds, keeps the last successful timings through transient outages, and shows independent health states for the NUS and LTA feeds.
+
+Dashboard intervals are configured in `lib/dashboard-config.ts`. Change `publicityRotationMs` to adjust the publicity rotation duration.
 
 ## Local setup
 
