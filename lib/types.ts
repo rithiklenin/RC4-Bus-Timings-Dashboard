@@ -32,6 +32,20 @@ export interface SourceResult {
   stops: BusStop[];
 }
 
+export type PsiBand = "good" | "moderate" | "unhealthy" | "very-unhealthy" | "hazardous";
+
+export interface WeatherResponse {
+  generatedAt: string;
+  status: SourceStatus;
+  stale: boolean;
+  updatedAt: string | null;
+  error?: string;
+  temperature: number | null;
+  next2h: { condition: string; area: string; start: string; end: string } | null;
+  later: { condition: string; start: string; end: string } | null;
+  psi: { value: number; band: PsiBand; region: string } | null;
+}
+
 export interface ArrivalsResponse {
   generatedAt: string;
   nus: SourceResult;

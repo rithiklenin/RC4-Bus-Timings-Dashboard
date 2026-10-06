@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DASHBOARD_CONFIG, PUBLIC_STOP_PAGES } from "@/lib/dashboard-config";
-import type { Arrival, ArrivalsResponse, BusService, BusStop, SourceResult } from "@/lib/types";
+import { DASHBOARD_CONFIG } from "@/lib/dashboard-config";
+import { DINING_PAGES, getCurrentMeal } from "@/lib/dining";
+import type { Arrival, ArrivalsResponse, BusService, BusStop, PsiBand, SourceResult, WeatherResponse } from "@/lib/types";
 
 const PUBLICITY_ITEMS = [
   {
@@ -74,6 +75,80 @@ function formatUpdated(value: string | null) {
     second: "2-digit",
     hour12: false,
   }).format(date)}`;
+}
+
+function formatHour(value: string) {
+  return new Intl.DateTimeFormat("en-SG", { timeZone: "Asia/Singapore", hour: "numeric", minute: "2-digit", hour12: true })
+    .format(new Date(value))
+    .replace(":00", "")
+    .replace(/\s/g, "")
+    .toLowerCase();
+}
+
+// NEA forecasts are free text ("Thundery Showers", "Partly Cloudy (Night)"), so match on keywords.
+export function weatherIcon(condition: string | null | undefined) {
+  const text = condition?.toLowerCase() ?? "";
+  if (text.includes("thunder")) return "⛈";
+  if (text.includes("shower") || text.includes("rain") || text.includes("drizzle")) return "🌧";
+  if (text.includes("haz") || text.includes("mist") || text.includes("fog")) return "🌫";
+  if (text.includes("wind")) return "💨";
+  if (text.includes("partly cloudy")) return text.includes("night") ? "☁" : "⛅";
+  if (text.includes("cloud") || text.includes("overcast")) return "☁";
+  if (text.includes("night")) return "🌙";
+  if (text.includes("fair") || text.includes("sunny") || text.includes("warm")) return "☀";
+  return "🌡";
+}
+
+// Strips NEA's "(Day)"/"(Night)" suffix, which the icon already conveys.
+function conditionLabel(condition: string) {
+  return condition.replace(/\s*\((day|night)\)/i, "");
+}
+
+const PSI_LABELS: Record<PsiBand, string> = {
+  good: "Good",
+  moderate: "Moderate",
+  unhealthy: "Unhealthy",
+  "very-unhealthy": "Very unhealthy",
+  hazardous: "Hazardous",
+};
+
+function WeatherStrip({ weather }: { weather: WeatherResponse | null }) {
+  if (!weather || weather.status === "error") {
+    return (
+      <section className="weather-strip weather-empty" aria-label="Weather">
+        <span>{weather ? "Weather unavailable" : "Loading weather…"}</span>
+      </section>
+    );
+  }
+
+  const { temperature, next2h, later, psi } = weather;
+
+  return (
+    <section className={`weather-strip ${weather.stale ? "weather-stale" : ""}`} aria-label="Weather">
+      <div className="weather-now">
+        <strong>{temperature !== null ? `${Math.round(temperature)}°` : "–"}</strong>
+      </div>
+      {next2h && (
+        <div className="weather-slot">
+          <span className="weather-slot-label">Until {formatHour(next2h.end)}</span>
+          <span className="weather-slot-body"><i aria-hidden="true">{weatherIcon(next2h.condition)}</i>{conditionLabel(next2h.condition)}</span>
+        </div>
+      )}
+      {later && (
+        <div className="weather-slot">
+          <span className="weather-slot-label">From {formatHour(later.start)}</span>
+          <span className="weather-slot-body"><i aria-hidden="true">{weatherIcon(later.condition)}</i>{conditionLabel(later.condition)}</span>
+        </div>
+      )}
+      {psi && (
+        <div className={`psi-badge psi-${psi.band}`} title={`24-hr PSI (${psi.region})`}>
+          <span>PSI</span>
+          <strong>{psi.value}</strong>
+          <span>{PSI_LABELS[psi.band]}</span>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function loadLabel(arrival: Arrival) {
@@ -216,66 +291,81 @@ function PublicityPanel() {
   );
 }
 
-function PublicStopsColumn({ data }: { data: ArrivalsResponse | null }) {
-  const [activePage, setActivePage] = useState(0);
+function PublicStopRotator({ stops, source }: { stops: BusStop[]; source: SourceResult }) {
+  const [activeIndex, setActiveIndex] = useState(0);
 
-  const pages = useMemo(() => {
-    const stops = data?.publicBus.stops ?? [];
-    return PUBLIC_STOP_PAGES
-      .map((page) => page.map(({ id }) => stops.find((stop) => stop.id === id)).filter((stop): stop is BusStop => Boolean(stop)))
-      .filter((page) => page.length > 0);
-  }, [data]);
-
-  const pageCount = pages.length;
   useEffect(() => {
-    if (pageCount < 2) return;
+    if (stops.length < 2) return;
     const rotation = window.setInterval(() => {
-      setActivePage((current) => (current + 1) % pageCount);
-    }, DASHBOARD_CONFIG.publicStopsRotationMs);
+      setActiveIndex((current) => (current + 1) % stops.length);
+    }, DASHBOARD_CONFIG.publicStopRotationMs);
     return () => window.clearInterval(rotation);
-  }, [pageCount]);
+  }, [stops.length]);
 
-  const visiblePage = pageCount ? activePage % pageCount : 0;
+  const stop = stops[activeIndex % stops.length];
 
   return (
-    <div className="public-column">
-      <div className="column-heading">
-        <span>Nearby public buses</span><i />
-        {pageCount > 1 && (
-          <div className="page-dots" aria-hidden="true">
-            {pages.map((page, index) => <span key={page[0].id} className={index === visiblePage ? "active" : ""} />)}
-          </div>
-        )}
-      </div>
-      <div className="public-pages">
-        {data && pageCount ? pages.map((page, index) => (
-          <div
-            className={`public-page ${index === visiblePage ? "is-active" : ""}`}
-            aria-hidden={index !== visiblePage}
-            key={page[0].id}
-          >
-            {page.map((stop) => <StopPanel key={stop.id} stop={stop} source={data.publicBus} />)}
-          </div>
-        )) : data?.publicBus.status === "error" ? (
-          <div className="public-page is-active"><ErrorPanel title="Public bus timings" error={data.publicBus.error} /></div>
-        ) : !data && (
-          <div className="public-page is-active"><SkeletonPanel /><SkeletonPanel /></div>
-        )}
-      </div>
+    <div className="stop-rotator" key={stop.id}>
+      <StopPanel stop={stop} source={source} />
     </div>
   );
 }
 
-export function Dashboard({ initialData = null }: { initialData?: ArrivalsResponse | null }) {
+function DiningPanel({ now }: { now: Date }) {
+  const { meal, serviceDate, nextSwitch } = getCurrentMeal(now);
+  const pages = DINING_PAGES[meal];
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    const rotation = window.setInterval(() => {
+      setActiveIndex((current) => current + 1);
+    }, DASHBOARD_CONFIG.diningRotationMs);
+    return () => window.clearInterval(rotation);
+  }, []);
+
+  const pageIndex = activeIndex % pages.length;
+  const otherMeal = meal === "dinner" ? "breakfast" : "dinner";
+
+  return (
+    <section className="stop-panel stop-secondary dining-panel" aria-label="Dining hall menu">
+      <header className="stop-header">
+        <div>
+          <div className="eyebrow">Dining hall · {meal}</div>
+          <h2>{formatDate(serviceDate)}</h2>
+        </div>
+        <div className="dining-dots" aria-hidden="true">
+          {pages.map((page, index) => <span className={index === pageIndex ? "active" : ""} key={page[0].name} />)}
+        </div>
+      </header>
+      <div className="dining-page" key={`${meal}-${pageIndex}`}>
+        {pages[pageIndex].map((cuisine) => (
+          <div className="cuisine" key={cuisine.name}>
+            <h3>{cuisine.name}{cuisine.vegetarian && <span className="veg-tag">Veg</span>}</h3>
+            <ul className="dish-list">
+              {cuisine.dishes.map((dish) => <li key={dish}>{dish}</li>)}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <div className="source-meta source-stale">
+        <span className="status-dot" />
+        <span>Sample menu</span>
+        <span className="meta-divider">·</span>
+        <span>Switches to {otherMeal} at {nextSwitch}</span>
+      </div>
+    </section>
+  );
+}
+
+export function Dashboard({ initialData = null, initialWeather = null }: { initialData?: ArrivalsResponse | null; initialWeather?: WeatherResponse | null }) {
   const [data, setData] = useState<ArrivalsResponse | null>(initialData);
+  const [weather, setWeather] = useState<WeatherResponse | null>(initialWeather);
   const [now, setNow] = useState(() => new Date());
-  const [refreshing, setRefreshing] = useState(false);
   const requestActive = useRef(false);
 
   const refresh = useCallback(async () => {
     if (requestActive.current) return;
     requestActive.current = true;
-    setRefreshing(true);
     try {
       const response = await fetch("/api/arrivals", { cache: "no-store" });
       if (!response.ok) throw new Error(`Dashboard API returned ${response.status}`);
@@ -290,7 +380,6 @@ export function Dashboard({ initialData = null }: { initialData?: ArrivalsRespon
       } : previous);
     } finally {
       requestActive.current = false;
-      setRefreshing(false);
     }
   }, []);
 
@@ -305,6 +394,31 @@ export function Dashboard({ initialData = null }: { initialData?: ArrivalsRespon
     };
   }, [initialData, refresh]);
 
+  useEffect(() => {
+    const refreshWeather = async () => {
+      try {
+        const response = await fetch("/api/weather", { cache: "no-store" });
+        if (!response.ok) throw new Error(`Weather API returned ${response.status}`);
+        const incoming = await response.json() as WeatherResponse;
+        // Keep the last good forecast on screen if NEA is down.
+        setWeather((previous) => incoming.status === "error" && previous?.status === "ok" ? { ...previous, stale: true } : incoming);
+      } catch (error) {
+        console.error("Unable to refresh weather", error instanceof Error ? error.message : error);
+        setWeather((previous) => previous ? { ...previous, stale: true } : previous);
+      }
+    };
+    const initialRefresh = !initialWeather ? window.setTimeout(() => void refreshWeather(), 0) : undefined;
+    const polling = window.setInterval(() => void refreshWeather(), DASHBOARD_CONFIG.weatherRefreshMs);
+    return () => {
+      window.clearInterval(polling);
+      if (initialRefresh !== undefined) window.clearTimeout(initialRefresh);
+    };
+  }, [initialWeather]);
+
+  const publicStops = useMemo(() => {
+    const stops = data?.publicBus.stops ?? [];
+    return ["19059", "19051"].map((id) => stops.find((stop) => stop.id === id)).filter((stop): stop is BusStop => Boolean(stop));
+  }, [data]);
   const nusStop = data?.nus.stops[0];
 
   return (
@@ -315,13 +429,12 @@ export function Dashboard({ initialData = null }: { initialData?: ArrivalsRespon
           <div className="brand-mark">RC<span>4</span></div>
           <div><h1>Bus Board</h1><p>Residential College 4</p></div>
         </div>
-        <div className="topbar-center">
-          <span className={`live-pill ${refreshing ? "is-refreshing" : ""}`}><i /> Live arrivals</span>
-          <span>Updates every 20 seconds</span>
-        </div>
-        <div className="clock">
-          <strong suppressHydrationWarning>{formatClock(now)}</strong>
-          <span suppressHydrationWarning>{formatDate(now)} · SGT</span>
+        <div className="topbar-right">
+          <WeatherStrip weather={weather} />
+          <div className="clock">
+            <strong suppressHydrationWarning>{formatClock(now)}</strong>
+            <span suppressHydrationWarning>{formatDate(now)} · SGT</span>
+          </div>
         </div>
       </header>
 
@@ -333,7 +446,13 @@ export function Dashboard({ initialData = null }: { initialData?: ArrivalsRespon
             : <SkeletonPanel />}
         </div>
 
-        <PublicStopsColumn data={data} />
+        <div className="public-column">
+          <div className="column-heading"><span>Nearby public buses</span><i /></div>
+          {publicStops.length && data ? <PublicStopRotator stops={publicStops} source={data.publicBus} />
+            : data?.publicBus.status === "error" ? <ErrorPanel title="Public bus timings" error={data.publicBus.error} />
+            : <SkeletonPanel />}
+          <DiningPanel now={now} />
+        </div>
       </div>
 
       <footer>
