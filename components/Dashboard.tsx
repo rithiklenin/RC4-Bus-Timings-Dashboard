@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DASHBOARD_CONFIG } from "@/lib/dashboard-config";
-import { DINING_PAGES, getCurrentMeal } from "@/lib/dining";
+import { paginateCuisines } from "@/lib/dining";
+import type { Cuisine } from "@/lib/dining";
+import { sortDiningMenuItems, type DiningMenuResponse } from "@/lib/dining-menu";
 import type { Arrival, ArrivalsResponse, BusService, BusStop, PsiBand, SourceResult, WeatherResponse } from "@/lib/types";
 
 const PUBLICITY_ITEMS = [
@@ -311,10 +313,40 @@ function PublicStopRotator({ stops, source }: { stops: BusStop[]; source: Source
   );
 }
 
-function DiningPanel({ now }: { now: Date }) {
-  const { meal, serviceDate, nextSwitch } = getCurrentMeal(now);
-  const pages = DINING_PAGES[meal];
+function DiningPanel() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [diningMenu, setDiningMenu] = useState<DiningMenuResponse | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadMenu = async () => {
+      try {
+        const response = await fetch("/api/dining-menu", { cache: "no-store" });
+        if (!response.ok) throw new Error(`Dining menu returned ${response.status}`);
+        const menu = await response.json() as DiningMenuResponse;
+        if (!cancelled) {
+          setDiningMenu(menu);
+        }
+      } catch {
+        if (!cancelled) setDiningMenu(null);
+      }
+    };
+    void loadMenu();
+    const refresh = window.setInterval(() => void loadMenu(), DASHBOARD_CONFIG.diningMenuRefreshMs);
+    return () => {
+      cancelled = true;
+      window.clearInterval(refresh);
+    };
+  }, []);
+
+  const pages = useMemo(() => {
+    if (!diningMenu) return [];
+    const cuisines: Cuisine[] = sortDiningMenuItems(diningMenu.items).map((item) => ({
+      ...item,
+      vegetarian: /vegetarian|\bveg\b/i.test(item.name),
+    }));
+    return paginateCuisines(cuisines);
+  }, [diningMenu]);
 
   useEffect(() => {
     const rotation = window.setInterval(() => {
@@ -323,35 +355,50 @@ function DiningPanel({ now }: { now: Date }) {
     return () => window.clearInterval(rotation);
   }, []);
 
-  const pageIndex = activeIndex % pages.length;
-  const otherMeal = meal === "dinner" ? "breakfast" : "dinner";
+  const pageIndex = pages.length ? activeIndex % pages.length : 0;
+  const panelMeal = diningMenu?.mealName.toLowerCase();
 
   return (
     <section className="stop-panel stop-secondary dining-panel" aria-label="Dining hall menu">
       <header className="stop-header">
         <div>
-          <div className="eyebrow">Dining hall · {meal}</div>
-          <h2>{formatDate(serviceDate)}</h2>
+          <div className="eyebrow">Dining hall{panelMeal ? ` · ${panelMeal}` : ""}</div>
+          <h2>{diningMenu?.dateLabel ?? "Not connected"}</h2>
         </div>
-        <div className="dining-dots" aria-hidden="true">
-          {pages.map((page, index) => <span className={index === pageIndex ? "active" : ""} key={page[0].name} />)}
-        </div>
+        {diningMenu && <div className="dining-dots" aria-label="Select dining menu page">
+          {pages.map((page, index) => (
+            <button
+              type="button"
+              className={index === pageIndex ? "active" : ""}
+              aria-label={`Show ${page.map((cuisine) => cuisine.name).join(" and ")}`}
+              aria-pressed={index === pageIndex}
+              onClick={() => setActiveIndex(index)}
+              key={page[0].name}
+            />
+          ))}
+        </div>}
       </header>
-      <div className="dining-page" key={`${meal}-${pageIndex}`}>
-        {pages[pageIndex].map((cuisine) => (
+      {diningMenu ? <div className="dining-page" key={`${panelMeal}-${pageIndex}`}>
+        {pages[pageIndex]?.map((cuisine) => (
           <div className="cuisine" key={cuisine.name}>
             <h3>{cuisine.name}{cuisine.vegetarian && <span className="veg-tag">Veg</span>}</h3>
             <ul className="dish-list">
-              {cuisine.dishes.map((dish) => <li key={dish}>{dish}</li>)}
+              {cuisine.dishes.map((dish) => <li title={dish} key={dish}>{dish}</li>)}
             </ul>
           </div>
         ))}
-      </div>
-      <div className="source-meta source-stale">
+      </div> : <div className="dining-empty">
+        <strong>NUS Dining is not connected</strong>
+        <span>Connect an account from the admin page to show the live RC4 menu.</span>
+        <a href="/admin">Open admin</a>
+      </div>}
+      <div className={`source-meta ${diningMenu ? "source-live" : "source-stale"}`}>
         <span className="status-dot" />
-        <span>Sample menu</span>
+        <span>{diningMenu ? "NUS Dining live" : "Not connected"}</span>
         <span className="meta-divider">·</span>
-        <span>Switches to {otherMeal} at {nextSwitch}</span>
+        <span>{diningMenu
+          ? `${diningMenu.serviceHours} · ${formatUpdated(diningMenu.updatedAt)}`
+          : "Connect NUS at /admin"}</span>
       </div>
     </section>
   );
@@ -451,7 +498,7 @@ export function Dashboard({ initialData = null, initialWeather = null }: { initi
           {publicStops.length && data ? <PublicStopRotator stops={publicStops} source={data.publicBus} />
             : data?.publicBus.status === "error" ? <ErrorPanel title="Public bus timings" error={data.publicBus.error} />
             : <SkeletonPanel />}
-          <DiningPanel now={now} />
+          <DiningPanel />
         </div>
       </div>
 

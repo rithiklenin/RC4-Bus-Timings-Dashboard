@@ -29,11 +29,11 @@ export const PLACEHOLDER_MENU: Record<Meal, Cuisine[]> = {
 };
 
 export const DINING_PAGES: Record<Meal, Cuisine[][]> = {
-  breakfast: toPairs(PLACEHOLDER_MENU.breakfast),
-  dinner: toPairs(PLACEHOLDER_MENU.dinner),
+  breakfast: paginateCuisines(PLACEHOLDER_MENU.breakfast),
+  dinner: paginateCuisines(PLACEHOLDER_MENU.dinner),
 };
 
-function toPairs(cuisines: Cuisine[]) {
+export function paginateCuisines(cuisines: Cuisine[]) {
   const pages: Cuisine[][] = [];
   for (let index = 0; index < cuisines.length; index += 2) pages.push(cuisines.slice(index, index + 2));
   return pages;
