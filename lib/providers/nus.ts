@@ -82,6 +82,8 @@ export function normalizeNusStop(payload: NusResponse): { stop: BusStop; updated
 export async function fetchNusStop(): Promise<{ stop: BusStop; updatedAt: string | null }> {
   const base = (process.env.NUS_PROXY_BASE_URL || DEFAULT_NUS_PROXY).replace(/\/$/, "");
   const response = await fetch(`${base}/api/stop/UTOWN`, {
+    // Identify this client explicitly; the proxy rejects the default Node.js user agent.
+    headers: { "User-Agent": "RC4BusDashboard/1.0" },
     cache: "no-store",
     signal: AbortSignal.timeout(8_000),
   });
