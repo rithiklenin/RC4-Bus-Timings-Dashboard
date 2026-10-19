@@ -59,22 +59,42 @@ describe("Dashboard", () => {
     }
   });
 
-  it("rotates the dining menu two cuisines at a time", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-10-08T12:00:00+08:00"));
-    try {
-      const menu = within(within(render(<Dashboard initialData={snapshot} />).container).getByLabelText("Dining hall menu"));
-      expect(menu.getByText("Dining hall · dinner")).toBeInTheDocument();
-      expect(menu.getByText("Malay")).toBeInTheDocument();
-      expect(menu.getByText("Western")).toBeInTheDocument();
+  it("clearly shows when NUS Dining is not connected without sample dishes", () => {
+    const menu = within(within(render(<Dashboard initialData={snapshot} />).container).getByLabelText("Dining hall menu"));
+    expect(menu.getByText("Not connected", { selector: "h2" })).toBeInTheDocument();
+    expect(menu.getByText("NUS Dining is not connected")).toBeInTheDocument();
+    expect(menu.queryByText("Malay")).not.toBeInTheDocument();
+    expect(menu.getByRole("link", { name: "Open admin" })).toHaveAttribute("href", "/admin");
+  });
 
-      act(() => vi.advanceTimersByTime(DASHBOARD_CONFIG.diningRotationMs));
-      expect(menu.getByText("Indian")).toBeInTheDocument();
-      expect(menu.getByText("Indian Vegetarian")).toBeInTheDocument();
-      expect(menu.queryByText("Malay")).not.toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
+  it("allows a dining menu page to be selected manually", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes("/api/dining-menu")) {
+        return Promise.resolve(new Response(JSON.stringify({
+          dateLabel: "Saturday, 17 Oct",
+          hallName: "RC4",
+          items: [
+            { name: "Asian", dishes: ["Tom yum noodles"] },
+            { name: "Western", dishes: ["Chicken chop"] },
+            { name: "Malay", dishes: ["Nasi lemak"] },
+            { name: "Indian Vegetarian", dishes: ["Dhal"] },
+          ],
+          mealName: "Breakfast",
+          serviceHours: "7:00–10:30 AM",
+          updatedAt: "2026-10-17T01:00:00.000Z",
+        }), { status: 200 }));
+      }
+      return new Promise(() => {});
+    }));
+
+    const menu = within(within(render(<Dashboard initialData={snapshot} />).container).getByLabelText("Dining hall menu"));
+    const secondPage = await menu.findByRole("button", { name: "Show Western and Indian Vegetarian" });
+    fireEvent.click(secondPage);
+
+    expect(menu.getByText("Western")).toBeInTheDocument();
+    expect(menu.getByText("Indian Vegetarian")).toBeInTheDocument();
+    expect(menu.queryByText("Asian")).not.toBeInTheDocument();
+    expect(secondPage).toHaveAttribute("aria-pressed", "true");
   });
 
   it("keeps last successful data when one source fails", () => {
@@ -103,5 +123,4 @@ describe("Dashboard", () => {
     expect(strip.getByText("113")).toBeInTheDocument();
     expect(strip.getByText("Unhealthy")).toBeInTheDocument();
   });
-
 });

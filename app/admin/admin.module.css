@@ -1,0 +1,20 @@
+.shell { min-height: 100vh; display: grid; place-items: center; padding: 32px 18px; background: radial-gradient(circle at 18% 12%, #123755 0, transparent 35%), #07101d; }
+.card { width: min(680px, 100%); padding: clamp(28px, 5vw, 52px); border: 1px solid rgba(91,225,210,.2); border-radius: 24px; background: linear-gradient(145deg, rgba(15,29,46,.97), rgba(9,20,34,.98)); box-shadow: 0 30px 80px rgba(0,0,0,.34); }
+.eyebrow { color: #5be1d2; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.card h1 { margin: 10px 0 14px; font: 600 clamp(34px, 6vw, 52px)/1 "Space Grotesk", sans-serif; letter-spacing: -.045em; }
+.intro { margin: 0 0 28px; color: #aebfce; line-height: 1.6; }
+.status { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; padding: 14px 16px; border: 1px solid rgba(242,186,95,.22); border-radius: 14px; background: rgba(242,186,95,.06); }
+.status > span { width: 9px; height: 9px; border-radius: 50%; background: #f2ba5f; box-shadow: 0 0 12px rgba(242,186,95,.6); }
+.status div { display: flex; flex-direction: column; gap: 3px; }.status small { color: #8294a8; }
+.status.connected { border-color: rgba(98,211,154,.24); background: rgba(98,211,154,.06); }.status.connected > span { background: #62d39a; box-shadow: 0 0 12px rgba(98,211,154,.6); }
+.primary,.secondary,.actions a,.actions button { min-height: 46px; border: 0; border-radius: 12px; padding: 0 18px; cursor: pointer; font-weight: 700; text-decoration: none; }
+.primary { width: 100%; display: grid; place-items: center; color: #05221f; background: #5be1d2; }
+.secondary { color: #071722; background: #7dcbfb; }.secondary:disabled { cursor: wait; opacity: .6; }
+.explainer { margin: 22px 0; padding: 15px 17px; border-left: 3px solid #f2ba5f; background: rgba(242,186,95,.06); color: #c6d2dc; }
+.explainer strong { color: #f2ba5f; }.explainer p { margin: 6px 0 0; font-size: 13px; line-height: 1.55; }
+.card form { display: flex; flex-direction: column; gap: 10px; }.card label { color: #d8fff7; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.card textarea { resize: vertical; width: 100%; border: 1px solid rgba(151,174,198,.22); border-radius: 12px; padding: 13px; color: #f5f8fb; background: rgba(3,11,20,.6); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; outline: none; }.card textarea:focus { border-color: #5be1d2; box-shadow: 0 0 0 3px rgba(91,225,210,.1); }
+.actions { display: flex; gap: 12px; }.actions a { display: grid; place-items: center; color: #05221f; background: #5be1d2; }.actions button { color: #f5f8fb; background: rgba(255,255,255,.1); }
+.message { margin-top: 18px; color: #d8fff7; font-size: 13px; }
+.footnote { margin: 26px 0 0; color: #71859a; font-size: 11px; line-height: 1.5; }
+
