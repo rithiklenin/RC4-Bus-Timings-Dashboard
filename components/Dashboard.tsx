@@ -5,28 +5,8 @@ import { DASHBOARD_CONFIG } from "@/lib/dashboard-config";
 import { paginateCuisines } from "@/lib/dining";
 import type { Cuisine } from "@/lib/dining";
 import { sortDiningMenuItems, type DiningMenuResponse } from "@/lib/dining-menu";
+import { DEFAULT_CSC_CONTENT, type CscContentItem, type CscContentResponse } from "@/lib/csc-content";
 import type { Arrival, ArrivalsResponse, BusService, BusStop, PsiBand, SourceResult, WeatherResponse } from "@/lib/types";
-
-const PUBLICITY_ITEMS = [
-  {
-    eyebrow: "CSC publicity",
-    title: "Upcoming RC4 events",
-    description: "A rotating space for committee posters, event details and venue information.",
-    note: "Designed for content supplied by CSC",
-  },
-  {
-    eyebrow: "Time-sensitive",
-    title: "Sign-up deadlines",
-    description: "Important registration windows stay visible without crowding the live transport panel.",
-    note: "Expired notices can be removed automatically",
-  },
-  {
-    eyebrow: "College updates",
-    title: "Selected RC4 announcements",
-    description: "A focused channel for relevant notices, reminders and community opportunities.",
-    note: "Curated for quick-glance viewing",
-  },
-] as const;
 
 function mergeSource(previous: SourceResult | undefined, incoming: SourceResult): SourceResult {
   if (incoming.status === "ok" || !previous?.stops.length) return incoming;
@@ -256,15 +236,36 @@ function ErrorPanel({ title, error, featured = false }: { title: string; error?:
 
 function PublicityPanel() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [items, setItems] = useState<CscContentItem[]>(DEFAULT_CSC_CONTENT);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadContent = async () => {
+      try {
+        const response = await fetch("/api/csc-content", { cache: "no-store" });
+        if (!response.ok) throw new Error(`CSC content returned ${response.status}`);
+        const content = await response.json() as CscContentResponse;
+        if (!cancelled && content.items.length) setItems(content.items);
+      } catch {
+        // Keep the last valid content on screen through transient admin API failures.
+      }
+    };
+    void loadContent();
+    const refresh = window.setInterval(() => void loadContent(), DASHBOARD_CONFIG.cscContentRefreshMs);
+    return () => {
+      cancelled = true;
+      window.clearInterval(refresh);
+    };
+  }, []);
 
   useEffect(() => {
     const rotation = window.setInterval(() => {
-      setActiveIndex((current) => (current + 1) % PUBLICITY_ITEMS.length);
+      setActiveIndex((current) => (current + 1) % items.length);
     }, DASHBOARD_CONFIG.publicityRotationMs);
     return () => window.clearInterval(rotation);
-  }, []);
+  }, [items.length]);
 
-  const item = PUBLICITY_ITEMS[activeIndex];
+  const item = items[activeIndex % items.length];
 
   return (
     <section className="publicity-panel" aria-label="Rotating RC4 updates" aria-live="polite">
@@ -277,14 +278,14 @@ function PublicityPanel() {
       <div className="publicity-meta">
         <span>RC4 highlights</span>
         <div className="publicity-dots" aria-label="Select RC4 highlight">
-          {PUBLICITY_ITEMS.map((entry, index) => (
+          {items.map((entry, index) => (
             <button
               type="button"
               className={index === activeIndex ? "active" : ""}
               aria-label={`Show ${entry.title}`}
               aria-pressed={index === activeIndex}
               onClick={() => setActiveIndex(index)}
-              key={entry.title}
+              key={entry.id}
             />
           ))}
         </div>
@@ -388,18 +389,15 @@ function DiningPanel() {
           </div>
         ))}
       </div> : <div className="dining-empty">
-        <strong>NUS Dining is not connected</strong>
-        <span>Connect an account from the admin page to show the live RC4 menu.</span>
-        <a href="/admin">Open admin</a>
-      </div>}
-      <div className={`source-meta ${diningMenu ? "source-live" : "source-stale"}`}>
         <span className="status-dot" />
-        <span>{diningMenu ? "NUS Dining live" : "Not connected"}</span>
+        <strong>NUS Dining Hall API not connected</strong>
+      </div>}
+      {diningMenu && <div className="source-meta source-live">
+        <span className="status-dot" />
+        <span>NUS Dining live</span>
         <span className="meta-divider">·</span>
-        <span>{diningMenu
-          ? `${diningMenu.serviceHours} · ${formatUpdated(diningMenu.updatedAt)}`
-          : "Connect NUS at /admin"}</span>
-      </div>
+        <span>{`${diningMenu.serviceHours} · ${formatUpdated(diningMenu.updatedAt)}`}</span>
+      </div>}
     </section>
   );
 }
