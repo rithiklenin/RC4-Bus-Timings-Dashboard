@@ -62,9 +62,9 @@ describe("Dashboard", () => {
   it("clearly shows when NUS Dining is not connected without sample dishes", () => {
     const menu = within(within(render(<Dashboard initialData={snapshot} />).container).getByLabelText("Dining hall menu"));
     expect(menu.getByText("Not connected", { selector: "h2" })).toBeInTheDocument();
-    expect(menu.getByText("NUS Dining is not connected")).toBeInTheDocument();
+    expect(menu.getByText("NUS Dining Hall API not connected")).toBeInTheDocument();
     expect(menu.queryByText("Malay")).not.toBeInTheDocument();
-    expect(menu.getByRole("link", { name: "Open admin" })).toHaveAttribute("href", "/admin");
+    expect(menu.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("allows a dining menu page to be selected manually", async () => {

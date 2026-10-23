@@ -13,13 +13,15 @@ Dashboard intervals are configured in `lib/dashboard-config.ts`. Change `publici
 
 ## Dining menu prototype
 
-Open [`/admin`](http://localhost:3000/admin) and complete the NUS Dining connection before testing the live RC4 menu card. The current NUS login flow returns to a fixed NUS callback URL, so the local prototype asks you to paste that final URL back into the admin page. It validates the saved login state, exchanges the callback, and keeps the resulting tokens in server memory.
+Open [`/admin`](http://localhost:3000/admin) to enter the prototype admin console. The mock NUS login does not request credentials and is isolated behind `lib/admin-auth.ts` so an official NUS authentication provider can replace it later. The console also edits the three rotating CSC highlight cards; saved content is held by the running server and the dashboard checks for updates every 15 seconds.
+
+From the **Dining connection** section, complete the NUS Dining connection before testing the live RC4 menu card. The current Dining App login flow returns to a fixed NUS callback URL, so the prototype asks you to paste that final URL back into the admin console. It validates the saved login state, exchanges the callback, and keeps the resulting tokens in server memory.
 
 The public dashboard never receives the bearer token. It requests normalized menu data from `/api/dining-menu`, while the server discovers the account's RC4 hall and date-specific station IDs and sends the authenticated upstream requests. The menu refreshes every 15 minutes. If the token is unavailable, the card shows an explicit **Not connected** state and no sample dishes.
 
 Because NUS redirects to a fixed NUS-owned callback page, browser cross-origin rules prevent the localhost admin page from reading that window's final URL automatically. The admin page opens the login in a small window and can read the copied callback URL directly from the clipboard with one click; a manual paste field remains as a fallback.
 
-This authentication store is for local evaluation only: it is shared by the running server process, disappears on restart, and is not suitable for deployment.
+The mock admin session, edited CSC content, and Dining authentication store are for local evaluation only. They are shared by the running server process or local browser session, disappear on restart or expiry, and are not suitable for deployment.
 
 ## Local setup
 
