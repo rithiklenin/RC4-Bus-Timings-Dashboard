@@ -41,15 +41,17 @@ export default function AdminConsole() {
     let cancelled = false;
     void Promise.all([
       fetch("/api/csc-content", { cache: "no-store" }).then((response) => response.json() as Promise<CscContentResponse>),
-      fetch("/api/dining-auth/status", { cache: "no-store" }).then((response) => (
-        readJsonResponse<DiningAuthStatus>(response, "Unable to read Dining connection status")
-      )),
+      fetch("/api/dining-auth/status", { cache: "no-store" }).then(async (response) => {
+        const result = await readJsonResponse<DiningAuthStatus & { error?: string }>(response, "Unable to read Dining connection status");
+        if (!response.ok) throw new Error(result.error ?? "Unable to read Dining connection status");
+        return result;
+      }),
     ]).then(([content, dining]) => {
       if (!cancelled) {
         setItems(content.items);
         setDiningStatus(dining);
       }
-    });
+    }).catch((error: unknown) => { if (!cancelled) setDiningMessage(error instanceof Error ? error.message : "Unable to load Dining status"); });
     return () => { cancelled = true; };
   }, []);
 
@@ -105,9 +107,16 @@ export default function AdminConsole() {
   }
 
   async function disconnectDining() {
-    await fetch("/api/dining-auth/logout", { method: "POST" });
-    setDiningMessage("NUS Dining disconnected.");
-    await refreshDiningStatus();
+    setDiningBusy(true);
+    setDiningMessage("");
+    try {
+      const response = await fetch("/api/dining-auth/logout", { method: "POST" });
+      const result = await readJsonResponse<{error?: string}>(response, "Unable to disconnect Dining");
+      if (!response.ok) throw new Error(result.error ?? "Unable to disconnect Dining");
+      setDiningStatus({ connected: false });
+      setDiningMessage("NUS Dining disconnected.");
+    } catch (error) { setDiningMessage(error instanceof Error ? error.message : "Unable to disconnect Dining"); }
+    finally { setDiningBusy(false); }
   }
 
   async function verifyDining() {

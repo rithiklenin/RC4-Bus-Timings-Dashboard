@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { storeDiningAuth, type DiningAuthResult } from "@/lib/dining-auth";
+import { diningErrorResponse } from "@/lib/dining-responses";
 import { readPendingDiningLogin } from "@/lib/dining-login";
 
 const AUTH_COMPLETE_URL = "https://inetapps.nus.edu.sg/mnusds/api/TokenAuth/Student";
@@ -16,17 +17,17 @@ interface DiningAuthPayload {
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { callbackUrl?: string } | null;
   if (!body?.callbackUrl) {
-    return NextResponse.json({ error: "Paste the final NUS callback URL" }, { status: 400 });
+    return NextResponse.json({ error: "Paste the final NUS callback URL" }, { status: 400, headers: { "Cache-Control": "private, no-store" } });
   }
 
   let callback: URL;
   try {
     callback = new URL(body.callbackUrl);
   } catch {
-    return NextResponse.json({ error: "That is not a valid URL" }, { status: 400 });
+    return NextResponse.json({ error: "That is not a valid URL" }, { status: 400, headers: { "Cache-Control": "private, no-store" } });
   }
   if (callback.protocol !== "https:" || callback.hostname !== "inetapps.nus.edu.sg" || callback.pathname !== "/nusds/login/student") {
-    return NextResponse.json({ error: "This is not the expected NUS Dining callback URL" }, { status: 400 });
+    return NextResponse.json({ error: "This is not the expected NUS Dining callback URL" }, { status: 400, headers: { "Cache-Control": "private, no-store" } });
   }
 
   const code = callback.searchParams.get("code");
@@ -35,10 +36,10 @@ export async function POST(request: Request) {
   const cookieStore = await cookies();
   const pending = readPendingDiningLogin(cookieStore.get("rc4-dining-oauth")?.value);
   if (!code || !state || !pending) {
-    return NextResponse.json({ error: "The callback or local login session is incomplete" }, { status: 400 });
+    return NextResponse.json({ error: "The callback or local login session is incomplete" }, { status: 400, headers: { "Cache-Control": "private, no-store" } });
   }
   if (state !== pending.state || (callbackSafeRequestId && callbackSafeRequestId !== pending.safeRequestId)) {
-    return NextResponse.json({ error: "The NUS callback does not match this login attempt" }, { status: 400 });
+    return NextResponse.json({ error: "The NUS callback does not match this login attempt" }, { status: 400, headers: { "Cache-Control": "private, no-store" } });
   }
   const safeRequestId = callbackSafeRequestId ?? pending.safeRequestId;
 
@@ -63,21 +64,15 @@ export async function POST(request: Request) {
       const invalidGrant = /invalid_grant|MSIS9612/i.test(upstreamMessage ?? "");
       const error = invalidGrant
         ? "NUS rejected this one-time authorization code. Start a new Dining login and connect it immediately; callback URLs cannot be reused."
-        : upstreamMessage ?? `NUS returned ${upstream.status}${responseText ? " with a non-JSON response" : " with an empty response"}`;
-      return NextResponse.json({ error }, { status: invalidGrant ? 400 : 502 });
+        : "NUS could not complete the Dining login. Start a new login and try again.";
+      return NextResponse.json({ error }, { status: invalidGrant ? 400 : 502, headers: { "Cache-Control": "private, no-store" } });
     }
 
     await storeDiningAuth(payload.result);
     cookieStore.delete("rc4-dining-oauth");
-    return NextResponse.json({ connected: true });
+    return NextResponse.json({ connected: true }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
-    console.error(
-      "Dining authentication completion failed",
-      error instanceof Error ? error.message : error,
-    );
-    return NextResponse.json({
-      error: "The Dining connection failed on the server. Check the deployment function logs and try a new login.",
-    }, { status: 502 });
+    return diningErrorResponse(error, "The Dining connection failed on the server");
   }
 }
 
