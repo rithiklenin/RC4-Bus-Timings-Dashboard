@@ -32,10 +32,12 @@ npm install
 cp .env.example .env.local
 ```
 
-Add your LTA key to `.env.local`:
+Add your LTA key and select the NUS provider in `.env.local`:
 
 ```dotenv
 LTA_ACCOUNT_KEY=your-key-here
+NUS_BUS_PROVIDER=nusbus
+NUSBUS_BASE_URL=https://nusbus.app/api
 ```
 
 Then start the dashboard:
@@ -50,7 +52,7 @@ Open [http://localhost:3000](http://localhost:3000). For a wall display, use the
 
 Public arrivals come from LTA's official `v3/BusArrival` API. The key is read only by the server route and is never sent to the browser.
 
-NUS arrivals use the public server endpoint maintained by the open-source [NUS NextBus Web](https://github.com/hewliyang/nus-nextbus-web) project. This is an unofficial integration and can change independently of this dashboard. Override it with `NUS_PROXY_BASE_URL`, or provide a comma-separated `NUS_PROXY_BASE_URLS` list to try compatible providers in order. A failing NUS provider does not take down the independent LTA feed, and one unavailable LTA stop no longer hides the other configured stop.
+NUS arrivals use a modular server-side provider selected with `NUS_BUS_PROVIDER`. The default `nusbus` provider calls the working `nusbus.app` proxy. The experimental `univus` provider retains the direct public-token and `inetapps.nus.edu.sg` bus-proxy flow; it requires the additional `UNIVUS_*` variables shown in `.env.example`. Provider credentials never reach the browser. A failing NUS request does not take down the independent LTA feed, and one unavailable LTA stop does not hide the other configured stop.
 
 ## Commands
 
@@ -64,4 +66,4 @@ npm run build      # production build
 
 ## Deploying to Vercel
 
-Import the repository into Vercel, add `LTA_ACCOUNT_KEY` as a production environment variable, and deploy. `NUS_PROXY_BASE_URL` is optional. The internal `/api/arrivals` route aggregates both providers and applies a short CDN cache without exposing credentials.
+Import this repository into Vercel and add `LTA_ACCOUNT_KEY` plus `NUS_BUS_PROVIDER=nusbus`. `NUSBUS_BASE_URL` is optional because it defaults to `https://nusbus.app/api`. If you deliberately select the experimental `univus` provider, add the required `UNIVUS_*` variables from `.env.example`. The internal `/api/arrivals` route aggregates both feeds and applies a short CDN cache without exposing credentials.

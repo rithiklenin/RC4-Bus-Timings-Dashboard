@@ -1,89 +1,99 @@
 import type { Arrival, BusStop, LoadLevel } from "@/lib/types";
+import { fetchNusBusShuttleService } from "@/lib/providers/nusbus";
+import { fetchUnivusShuttleService } from "@/lib/providers/univus";
 
-const DEFAULT_NUS_PROXY = "https://bus.hewliyang.com";
+const DEFAULT_STOP = "UTOWN";
 
-function nusProxyBases() {
-  const configured = process.env.NUS_PROXY_BASE_URLS
-    ?.split(",")
-    .map((base) => base.trim())
-    .filter(Boolean);
-  const bases = configured?.length
-    ? configured
-    : [process.env.NUS_PROXY_BASE_URL || DEFAULT_NUS_PROXY];
-  return [...new Set(bases.map((base) => base.replace(/\/$/, "")))];
+interface NusShuttleEta {
+  eta?: number;
+  ts?: string;
 }
 
-interface NusTiming {
+interface NusShuttle {
   name?: string;
   arrivalTime?: string | number;
   nextArrivalTime?: string | number;
-  arrivalTime_ts?: string;
-  nextArrivalTime_ts?: string;
-  arrivalTime_capacity?: number;
-  arrivalTime_ridership?: number;
-  nextArrivalTime_capacity?: number;
-  nextArrivalTime_ridership?: number;
+  passengers?: string;
+  nextPassengers?: string;
+  _etas?: NusShuttleEta[];
 }
 
-interface NusResponse {
-  etas?: {
-    lastUpdated?: string;
-    busStopName?: string;
-    busStopCaption?: string;
-    timings?: NusTiming[];
+interface NusShuttleServiceResponse {
+  ShuttleServiceResult?: {
+    TimeStamp?: string;
+    Timestamp?: string;
+    name?: string;
+    caption?: string;
+    shuttles?: NusShuttle[];
   };
+}
+
+type NusProvider = "nusbus" | "univus";
+
+function selectedProvider(): NusProvider {
+  const configured = process.env.NUS_BUS_PROVIDER?.trim().toLowerCase() || "nusbus";
+  if (configured === "nusbus" || configured === "univus") return configured;
+  throw new Error(`Unsupported NUS_BUS_PROVIDER: ${configured}`);
 }
 
 function parseMinutes(value: string | number | undefined): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+  }
   if (typeof value !== "string") return null;
-  if (value.trim().toLowerCase() === "arr") return 0;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "arr") return 0;
+  if (!normalized || normalized === "-" || normalized === "-1") return null;
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function loadLevel(value: string | undefined): LoadLevel {
+  switch (value?.trim().toLowerCase()) {
+    case "low": return "seats";
+    case "medium": return "standing";
+    case "high": return "limited";
+    case "full": return "full";
+    default: return "unknown";
+  }
 }
 
 function makeArrival(
-  value: string | number | undefined,
-  timestamp: string | undefined,
-  capacity: number | undefined,
-  ridership: number | undefined,
+  fallback: string | number | undefined,
+  eta: NusShuttleEta | undefined,
+  passengers: string | undefined,
 ): Arrival | null {
-  const minutes = parseMinutes(value);
+  const minutes = parseMinutes(eta?.eta ?? fallback);
   if (minutes === null) return null;
-  const occupancyPercent = capacity && typeof ridership === "number"
-    ? Math.min(100, Math.max(0, Math.round((ridership / capacity) * 100)))
-    : undefined;
-  const load: LoadLevel = occupancyPercent === undefined
-    ? "unknown"
-    : occupancyPercent >= 95 ? "full" : occupancyPercent >= 75 ? "limited" : occupancyPercent >= 45 ? "standing" : "seats";
   return {
     minutes,
-    estimatedAt: timestamp ?? null,
-    load,
-    wheelchair: true,
+    estimatedAt: eta?.ts ?? null,
+    load: loadLevel(passengers),
+    wheelchair: null,
     vehicleType: "shuttle",
     monitored: true,
-    occupancyPercent,
   };
 }
 
-export function normalizeNusStop(payload: NusResponse): { stop: BusStop; updatedAt: string | null } {
-  const etas = payload.etas;
-  if (!etas || !Array.isArray(etas.timings)) throw new Error("NUS proxy returned an invalid response");
+export function normalizeNusStop(payload: NusShuttleServiceResponse): { stop: BusStop; updatedAt: string | null } {
+  const result = payload.ShuttleServiceResult;
+  if (!result || !Array.isArray(result.shuttles)) {
+    throw new Error("NUS NextBus returned an invalid response");
+  }
 
   return {
-    updatedAt: etas.lastUpdated ?? null,
+    updatedAt: result.TimeStamp ?? result.Timestamp ?? null,
     stop: {
-      id: etas.busStopName ?? "UTOWN",
-      name: etas.busStopCaption ?? "University Town",
+      id: DEFAULT_STOP,
+      name: result.caption ?? result.name ?? "University Town",
       kind: "nus",
-      services: etas.timings
-        .filter((timing): timing is NusTiming & { name: string } => Boolean(timing.name))
-        .map((timing) => ({
-          serviceNo: timing.name,
+      services: result.shuttles
+        .filter((shuttle): shuttle is NusShuttle & { name: string } => Boolean(shuttle.name))
+        .map((shuttle) => ({
+          serviceNo: shuttle.name,
           arrivals: [
-            makeArrival(timing.arrivalTime, timing.arrivalTime_ts, timing.arrivalTime_capacity, timing.arrivalTime_ridership),
-            makeArrival(timing.nextArrivalTime, timing.nextArrivalTime_ts, timing.nextArrivalTime_capacity, timing.nextArrivalTime_ridership),
+            makeArrival(shuttle.arrivalTime, shuttle._etas?.[0], shuttle.passengers),
+            makeArrival(shuttle.nextArrivalTime, shuttle._etas?.[1], shuttle.nextPassengers),
           ].filter((arrival): arrival is Arrival => arrival !== null),
         })),
     },
@@ -91,23 +101,9 @@ export function normalizeNusStop(payload: NusResponse): { stop: BusStop; updated
 }
 
 export async function fetchNusStop(): Promise<{ stop: BusStop; updatedAt: string | null }> {
-  const failures: string[] = [];
-  for (const base of nusProxyBases()) {
-    try {
-      const response = await fetch(`${base}/api/stop/UTOWN`, {
-        // Identify this client explicitly; the proxy rejects the default Node.js user agent.
-        headers: { "User-Agent": "RC4BusDashboard/1.0" },
-        cache: "no-store",
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { message?: string } | null;
-        throw new Error(`HTTP ${response.status}${payload?.message ? ` (${payload.message})` : ""}`);
-      }
-      return normalizeNusStop((await response.json()) as NusResponse);
-    } catch (error) {
-      failures.push(`${base}: ${error instanceof Error ? error.message : "request failed"}`);
-    }
-  }
-  throw new Error(`All configured NUS shuttle providers failed: ${failures.join("; ")}`);
+  const provider = selectedProvider();
+  const payload = provider === "nusbus"
+    ? await fetchNusBusShuttleService(DEFAULT_STOP)
+    : await fetchUnivusShuttleService(DEFAULT_STOP);
+  return normalizeNusStop(payload as NusShuttleServiceResponse);
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { encodePendingDiningLogin, extractUpstreamSessionCookie } from "@/lib/dining-login";
 
 const AUTH_START_URL = "https://inetapps.nus.edu.sg/mnusds/api/TokenAuth/GetStudentUrl";
 
@@ -20,7 +21,11 @@ export async function GET() {
   }
 
   const response = NextResponse.redirect(loginUrl);
-  response.cookies.set("rc4-dining-oauth", Buffer.from(JSON.stringify({ state, safeRequestId })).toString("base64url"), {
+  response.cookies.set("rc4-dining-oauth", encodePendingDiningLogin({
+    state,
+    safeRequestId,
+    upstreamCookie: extractUpstreamSessionCookie(upstream.headers),
+  }), {
     httpOnly: true,
     maxAge: 10 * 60,
     path: "/",

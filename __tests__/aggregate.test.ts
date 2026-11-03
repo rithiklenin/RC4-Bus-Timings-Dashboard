@@ -32,7 +32,7 @@ describe("arrival aggregation", () => {
     vi.mocked(fetchPublicBusStops).mockRejectedValue(new Error("bad key"));
     const result = await getArrivals(new Date("2026-10-01T04:00:00.000Z"));
     expect(result.nus.stops).toHaveLength(1);
-    expect(result.publicBus).toMatchObject({ status: "error", stale: true, stops: [] });
+    expect(result.publicBus).toMatchObject({ status: "error", stale: true, upstreamError: "bad key", stops: [] });
   });
 
   it("marks an old NUS update as stale", async () => {

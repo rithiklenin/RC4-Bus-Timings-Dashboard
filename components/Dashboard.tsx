@@ -407,6 +407,7 @@ export function Dashboard({ initialData = null, initialWeather = null }: { initi
   const [weather, setWeather] = useState<WeatherResponse | null>(initialWeather);
   const [now, setNow] = useState(() => new Date());
   const requestActive = useRef(false);
+  const lastUpstreamErrors = useRef<{ nus: string | null; publicBus: string | null }>({ nus: null, publicBus: null });
 
   const refresh = useCallback(async () => {
     if (requestActive.current) return;
@@ -415,6 +416,13 @@ export function Dashboard({ initialData = null, initialWeather = null }: { initi
       const response = await fetch("/api/arrivals", { cache: "no-store" });
       if (!response.ok) throw new Error(`Dashboard API returned ${response.status}`);
       const incoming = await response.json() as ArrivalsResponse;
+      for (const source of ["nus", "publicBus"] as const) {
+        const detail = incoming[source].status === "error" ? incoming[source].upstreamError ?? null : null;
+        if (detail && detail !== lastUpstreamErrors.current[source]) {
+          console.error(`${source === "nus" ? "NUS" : "Public bus"} upstream error:`, detail);
+        }
+        lastUpstreamErrors.current[source] = detail;
+      }
       setData((previous) => mergeSnapshots(previous, incoming));
     } catch (error) {
       console.error("Unable to refresh arrivals", error instanceof Error ? error.message : error);

@@ -1,10 +1,20 @@
+import { Buffer } from "node:buffer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchPublicBusStops, normalizeLtaStop, PUBLIC_STOPS } from "@/lib/providers/lta";
 import { fetchNusStop, normalizeNusStop } from "@/lib/providers/nus";
 
 afterEach(() => {
   delete process.env.LTA_ACCOUNT_KEY;
-  delete process.env.NUS_PROXY_BASE_URLS;
+  delete process.env.NUS_BUS_PROVIDER;
+  delete process.env.NUSBUS_BASE_URL;
+  delete process.env.UNIVUS_AUTH_BASE_URL;
+  delete process.env.UNIVUS_BUS_PROXY_BASE_URL;
+  delete process.env.UNIVUS_HTD_API_KEY;
+  delete process.env.UNIVUS_APP_API_KEY;
+  delete process.env.UNIVUS_BUS_PROXY_API_KEY;
+  delete process.env.UNIVUS_DEVICE_ID;
+  delete process.env.UNIVUS_APP_VERSION;
+  delete process.env.UNIVUS_IP_ADDRESS;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -37,38 +47,98 @@ describe("LTA provider", () => {
 });
 
 describe("NUS provider", () => {
-  it("normalizes arrivals and calculates occupancy", () => {
-    const result = normalizeNusStop({ etas: {
-      lastUpdated: "2026-10-01T12:00:00+08:00",
-      busStopName: "UTOWN",
-      busStopCaption: "University Town",
-      timings: [{ name: "D1", arrivalTime: "Arr", nextArrivalTime: "8", arrivalTime_capacity: 88, arrivalTime_ridership: 86 }],
+  it("normalizes official NextBus arrivals and passenger loads", () => {
+    const result = normalizeNusStop({ ShuttleServiceResult: {
+      TimeStamp: "2026-10-01T12:00:00+08:00",
+      name: "UTOWN",
+      caption: "University Town",
+      shuttles: [{
+        name: "D1",
+        arrivalTime: "Arr",
+        nextArrivalTime: "8",
+        passengers: "High",
+        nextPassengers: "Low",
+        _etas: [{ eta: 0, ts: "2026-10-01 12:00:00" }, { eta: 8, ts: "2026-10-01 12:08:00" }],
+      }],
     } });
 
-    expect(result.stop.services[0].arrivals[0]).toMatchObject({ minutes: 0, occupancyPercent: 98, load: "full" });
-    expect(result.stop.services[0].arrivals[1].minutes).toBe(8);
+    expect(result.updatedAt).toBe("2026-10-01T12:00:00+08:00");
+    expect(result.stop.services[0].arrivals[0]).toMatchObject({ minutes: 0, load: "limited" });
+    expect(result.stop.services[0].arrivals[1]).toMatchObject({ minutes: 8, load: "seats" });
   });
 
   it("rejects malformed responses", () => {
     expect(() => normalizeNusStop({})).toThrow("invalid response");
   });
 
-  it("falls back to the next configured NUS provider", async () => {
-    process.env.NUS_PROXY_BASE_URLS = "https://first.example, https://second.example";
-    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
-      if (String(input).startsWith("https://first.example")) {
-        return Promise.resolve(new Response(JSON.stringify({ message: "unavailable" }), { status: 502 }));
-      }
-      return Promise.resolve(new Response(JSON.stringify({ etas: {
-        busStopName: "UTOWN",
-        busStopCaption: "University Town",
-        timings: [{ name: "D1", arrivalTime: "3" }],
-      } }), { status: 200 }));
+  it("uses the nusbus.app provider by default", async () => {
+    process.env.NUSBUS_BASE_URL = "https://nusbus.example/api/";
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("https://nusbus.example/api/shuttle-service?busstopname=UTOWN");
+      expect(init?.headers).toMatchObject({ Accept: "application/json" });
+      return Promise.resolve(Response.json({ ShuttleServiceResult: {
+        name: "UTOWN",
+        caption: "University Town",
+        shuttles: [{ name: "D1", arrivalTime: "3", nextArrivalTime: "-" }],
+      } }));
     }));
 
     const result = await fetchNusStop();
     expect(result.stop.name).toBe("University Town");
     expect(result.stop.services[0].arrivals[0].minutes).toBe(3);
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("can switch to the direct uNivUS inetapps provider", async () => {
+    process.env.NUS_BUS_PROVIDER = "univus";
+    process.env.UNIVUS_AUTH_BASE_URL = "https://auth.example";
+    process.env.UNIVUS_BUS_PROXY_BASE_URL = "https://inetapps.example/univus/api/bus-proxy";
+    process.env.UNIVUS_HTD_API_KEY = "htd-key";
+    process.env.UNIVUS_APP_API_KEY = "app-key";
+    process.env.UNIVUS_BUS_PROXY_API_KEY = "proxy-key";
+    process.env.UNIVUS_DEVICE_ID = "11111111-1111-4111-8111-111111111111";
+    const jwt = `header.${Buffer.from(JSON.stringify({ exp: 4_102_444_800 })).toString("base64url")}.signature`;
+
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/univus-public/mobile/get-access-token")) {
+        expect(init?.headers).toMatchObject({ "X-HTD-API": "htd-key", "X-APP-API": "app-key" });
+        return Promise.resolve(Response.json({
+          code: "00000",
+          data: { token: jwt, userid: "public-user", domain: "PUBLIC" },
+        }));
+      }
+
+      expect(url).toBe("https://inetapps.example/univus/api/bus-proxy/shuttle-service");
+      expect(init?.headers).toMatchObject({
+        "x-api-key": "proxy-key",
+        Authorization: `Bearer ${jwt}`,
+      });
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        token: jwt,
+        userid: "public-user",
+        domain: "PUBLIC",
+        deviceid: "11111111-1111-4111-8111-111111111111",
+        busstopname: "UTOWN",
+      });
+      return Promise.resolve(Response.json({
+        code: "00000",
+        data: { ShuttleServiceResult: {
+          name: "UTOWN",
+          caption: "University Town",
+          shuttles: [{ name: "D1", arrivalTime: "3", nextArrivalTime: "-" }],
+        } },
+      }));
+    }));
+
+    const result = await fetchNusStop();
+    expect(result.stop.name).toBe("University Town");
+    expect(result.stop.services[0].arrivals[0].minutes).toBe(3);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects unsupported provider names", async () => {
+    process.env.NUS_BUS_PROVIDER = "unknown";
+    await expect(fetchNusStop()).rejects.toThrow("Unsupported NUS_BUS_PROVIDER: unknown");
   });
 });

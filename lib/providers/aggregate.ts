@@ -2,8 +2,10 @@ import { fetchPublicBusStops } from "@/lib/providers/lta";
 import { fetchNusStop } from "@/lib/providers/nus";
 import type { ArrivalsResponse, SourceResult } from "@/lib/types";
 
+const errorDetail = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
+
 const safeMessage = (source: string, reason: unknown) => {
-  console.error(`${source} arrivals unavailable`, reason instanceof Error ? reason.message : reason);
+  console.error(`${source} arrivals unavailable`, errorDetail(reason));
   return source === "NUS"
     ? "NUS shuttle feed unavailable. Public buses are unaffected."
     : `${source} timings are temporarily unavailable`;
@@ -18,11 +20,25 @@ export async function getArrivals(now = new Date()): Promise<ArrivalsResponse> {
 
   const nus: SourceResult = nusResult.status === "fulfilled"
     ? { status: "ok", stale: nusIsStale, updatedAt: nusUpdatedAt, stops: [nusResult.value.stop] }
-    : { status: "error", stale: true, updatedAt: null, error: safeMessage("NUS", nusResult.reason), stops: [] };
+    : {
+        status: "error",
+        stale: true,
+        updatedAt: null,
+        error: safeMessage("NUS", nusResult.reason),
+        upstreamError: errorDetail(nusResult.reason),
+        stops: [],
+      };
 
   const publicBus: SourceResult = ltaResult.status === "fulfilled"
     ? { status: "ok", stale: false, updatedAt: now.toISOString(), stops: ltaResult.value }
-    : { status: "error", stale: true, updatedAt: null, error: safeMessage("Public bus", ltaResult.reason), stops: [] };
+    : {
+        status: "error",
+        stale: true,
+        updatedAt: null,
+        error: safeMessage("Public bus", ltaResult.reason),
+        upstreamError: errorDetail(ltaResult.reason),
+        stops: [],
+      };
 
   return { generatedAt: now.toISOString(), nus, publicBus };
 }

@@ -29,6 +29,7 @@ export interface SourceResult {
   stale: boolean;
   updatedAt: string | null;
   error?: string;
+  upstreamError?: string;
   stops: BusStop[];
 }
 
