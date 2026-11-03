@@ -46,28 +46,38 @@ export async function POST(request: Request) {
   exchangeUrl.searchParams.set("safeRequestId", safeRequestId);
   exchangeUrl.searchParams.set("code", code);
   exchangeUrl.searchParams.set("state", state);
-  const upstream = await fetch(exchangeUrl, {
-    cache: "no-store",
-    headers: pending.upstreamCookie ? { Cookie: pending.upstreamCookie } : undefined,
-  });
-  const responseText = await upstream.text();
-  let payload: DiningAuthPayload | null = null;
   try {
-    payload = responseText ? JSON.parse(responseText) as DiningAuthPayload : null;
-  } catch {
-    // Report the upstream status below without exposing its HTML or proxy response.
-  }
-  if (!upstream.ok || !payload?.success || !payload.result?.accessToken) {
-    const upstreamMessage = payload?.error?.message;
-    const invalidGrant = /invalid_grant|MSIS9612/i.test(upstreamMessage ?? "");
-    const error = invalidGrant
-      ? "NUS rejected this one-time authorization code. Start a new Dining login and connect it immediately; callback URLs cannot be reused."
-      : upstreamMessage ?? `NUS returned ${upstream.status}${responseText ? " with a non-JSON response" : " with an empty response"}`;
-    return NextResponse.json({ error }, { status: invalidGrant ? 400 : 502 });
-  }
+    const upstream = await fetch(exchangeUrl, {
+      cache: "no-store",
+      headers: pending.upstreamCookie ? { Cookie: pending.upstreamCookie } : undefined,
+    });
+    const responseText = await upstream.text();
+    let payload: DiningAuthPayload | null = null;
+    try {
+      payload = responseText ? JSON.parse(responseText) as DiningAuthPayload : null;
+    } catch {
+      // Report the upstream status below without exposing its HTML or proxy response.
+    }
+    if (!upstream.ok || !payload?.success || !payload.result?.accessToken) {
+      const upstreamMessage = payload?.error?.message;
+      const invalidGrant = /invalid_grant|MSIS9612/i.test(upstreamMessage ?? "");
+      const error = invalidGrant
+        ? "NUS rejected this one-time authorization code. Start a new Dining login and connect it immediately; callback URLs cannot be reused."
+        : upstreamMessage ?? `NUS returned ${upstream.status}${responseText ? " with a non-JSON response" : " with an empty response"}`;
+      return NextResponse.json({ error }, { status: invalidGrant ? 400 : 502 });
+    }
 
-  await storeDiningAuth(payload.result);
-  cookieStore.delete("rc4-dining-oauth");
-  return NextResponse.json({ connected: true });
+    await storeDiningAuth(payload.result);
+    cookieStore.delete("rc4-dining-oauth");
+    return NextResponse.json({ connected: true });
+  } catch (error) {
+    console.error(
+      "Dining authentication completion failed",
+      error instanceof Error ? error.message : error,
+    );
+    return NextResponse.json({
+      error: "The Dining connection failed on the server. Check the deployment function logs and try a new login.",
+    }, { status: 502 });
+  }
 }
 

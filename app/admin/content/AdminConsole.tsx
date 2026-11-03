@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { DEFAULT_CSC_CONTENT, type CscContentItem, type CscContentResponse } from "@/lib/csc-content";
+import { readJsonResponse } from "@/lib/response-json";
 import styles from "../admin.module.css";
 
 interface DiningAuthStatus {
@@ -28,14 +29,21 @@ export default function AdminConsole() {
 
   const refreshDiningStatus = useCallback(async () => {
     const response = await fetch("/api/dining-auth/status", { cache: "no-store" });
-    setDiningStatus(await response.json() as DiningAuthStatus);
+    const result = await readJsonResponse<DiningAuthStatus & { error?: string }>(
+      response,
+      "Unable to read Dining connection status",
+    );
+    if (!response.ok) throw new Error(result.error ?? "Unable to read Dining connection status");
+    setDiningStatus(result);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
       fetch("/api/csc-content", { cache: "no-store" }).then((response) => response.json() as Promise<CscContentResponse>),
-      fetch("/api/dining-auth/status", { cache: "no-store" }).then((response) => response.json() as Promise<DiningAuthStatus>),
+      fetch("/api/dining-auth/status", { cache: "no-store" }).then((response) => (
+        readJsonResponse<DiningAuthStatus>(response, "Unable to read Dining connection status")
+      )),
     ]).then(([content, dining]) => {
       if (!cancelled) {
         setItems(content.items);
@@ -81,7 +89,10 @@ export default function AdminConsole() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ callbackUrl }),
       });
-      const result = await response.json() as { error?: string };
+      const result = await readJsonResponse<{ error?: string }>(
+        response,
+        "Unable to connect NUS Dining",
+      );
       if (!response.ok) throw new Error(result.error ?? "Unable to connect NUS Dining");
       setCallbackUrl("");
       setDiningMessage("NUS Dining connected successfully.");
@@ -104,7 +115,10 @@ export default function AdminConsole() {
     setDiningMessage("");
     try {
       const response = await fetch("/api/dining-auth/test", { cache: "no-store" });
-      const result = await response.json() as { connected?: boolean; error?: string };
+      const result = await readJsonResponse<{ connected?: boolean; error?: string }>(
+        response,
+        "Connection test failed",
+      );
       if (!response.ok || !result.connected) throw new Error(result.error ?? "Connection test failed");
       setDiningMessage("Verified. The authenticated NUS Dining request succeeded.");
     } catch (error) {
