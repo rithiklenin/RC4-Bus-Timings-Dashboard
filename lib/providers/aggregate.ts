@@ -4,7 +4,9 @@ import type { ArrivalsResponse, SourceResult } from "@/lib/types";
 
 const safeMessage = (source: string, reason: unknown) => {
   console.error(`${source} arrivals unavailable`, reason instanceof Error ? reason.message : reason);
-  return `${source} timings are temporarily unavailable`;
+  return source === "NUS"
+    ? "NUS shuttle feed unavailable. Public buses are unaffected."
+    : `${source} timings are temporarily unavailable`;
 };
 
 export async function getArrivals(now = new Date()): Promise<ArrivalsResponse> {

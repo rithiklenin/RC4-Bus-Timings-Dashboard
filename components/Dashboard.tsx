@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DASHBOARD_CONFIG } from "@/lib/dashboard-config";
 import { paginateCuisines } from "@/lib/dining";
 import type { Cuisine } from "@/lib/dining";
-import { sortDiningMenuItems, type DiningMenuResponse } from "@/lib/dining-menu";
+import { sortDiningMenuItems, type DiningMenuResponse } from "@/lib/dining-menu-shared";
 import { DEFAULT_CSC_CONTENT, type CscContentItem, type CscContentResponse } from "@/lib/csc-content";
 import type { Arrival, ArrivalsResponse, BusService, BusStop, PsiBand, SourceResult, WeatherResponse } from "@/lib/types";
 

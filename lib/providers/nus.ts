@@ -2,6 +2,17 @@ import type { Arrival, BusStop, LoadLevel } from "@/lib/types";
 
 const DEFAULT_NUS_PROXY = "https://bus.hewliyang.com";
 
+function nusProxyBases() {
+  const configured = process.env.NUS_PROXY_BASE_URLS
+    ?.split(",")
+    .map((base) => base.trim())
+    .filter(Boolean);
+  const bases = configured?.length
+    ? configured
+    : [process.env.NUS_PROXY_BASE_URL || DEFAULT_NUS_PROXY];
+  return [...new Set(bases.map((base) => base.replace(/\/$/, "")))];
+}
+
 interface NusTiming {
   name?: string;
   arrivalTime?: string | number;
@@ -80,13 +91,23 @@ export function normalizeNusStop(payload: NusResponse): { stop: BusStop; updated
 }
 
 export async function fetchNusStop(): Promise<{ stop: BusStop; updatedAt: string | null }> {
-  const base = (process.env.NUS_PROXY_BASE_URL || DEFAULT_NUS_PROXY).replace(/\/$/, "");
-  const response = await fetch(`${base}/api/stop/UTOWN`, {
-    // Identify this client explicitly; the proxy rejects the default Node.js user agent.
-    headers: { "User-Agent": "RC4BusDashboard/1.0" },
-    cache: "no-store",
-    signal: AbortSignal.timeout(8_000),
-  });
-  if (!response.ok) throw new Error(`NUS proxy returned HTTP ${response.status}`);
-  return normalizeNusStop((await response.json()) as NusResponse);
+  const failures: string[] = [];
+  for (const base of nusProxyBases()) {
+    try {
+      const response = await fetch(`${base}/api/stop/UTOWN`, {
+        // Identify this client explicitly; the proxy rejects the default Node.js user agent.
+        headers: { "User-Agent": "RC4BusDashboard/1.0" },
+        cache: "no-store",
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { message?: string } | null;
+        throw new Error(`HTTP ${response.status}${payload?.message ? ` (${payload.message})` : ""}`);
+      }
+      return normalizeNusStop((await response.json()) as NusResponse);
+    } catch (error) {
+      failures.push(`${base}: ${error instanceof Error ? error.message : "request failed"}`);
+    }
+  }
+  throw new Error(`All configured NUS shuttle providers failed: ${failures.join("; ")}`);
 }

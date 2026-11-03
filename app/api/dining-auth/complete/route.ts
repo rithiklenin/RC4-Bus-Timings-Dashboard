@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: payload.error?.message ?? "NUS rejected the login callback" }, { status: 502 });
   }
 
-  storeDiningAuth(payload.result);
+  await storeDiningAuth(payload.result);
   cookieStore.delete("rc4-dining-oauth");
   return NextResponse.json({ connected: true });
 }

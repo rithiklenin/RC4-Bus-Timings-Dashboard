@@ -76,7 +76,7 @@ export async function fetchPublicBusStops(now = new Date()): Promise<BusStop[]> 
   const accountKey = process.env.LTA_ACCOUNT_KEY;
   if (!accountKey) throw new Error("LTA AccountKey is not configured");
 
-  return Promise.all(
+  const results = await Promise.allSettled(
     PUBLIC_STOPS.map(async (stop) => {
       const response = await fetch(`${LTA_URL}?BusStopCode=${stop.id}`, {
         headers: { AccountKey: accountKey, accept: "application/json" },
@@ -87,4 +87,16 @@ export async function fetchPublicBusStops(now = new Date()): Promise<BusStop[]> 
       return normalizeLtaStop(stop, (await response.json()) as LtaResponse, now);
     }),
   );
+
+  const available = results
+    .filter((result): result is PromiseFulfilledResult<BusStop> => result.status === "fulfilled")
+    .map((result) => result.value);
+  const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+  for (const failure of failures) {
+    console.error("One public bus stop is unavailable", failure.reason instanceof Error ? failure.reason.message : failure.reason);
+  }
+  if (!available.length) {
+    throw new AggregateError(failures.map((failure) => failure.reason), "Every configured LTA stop is unavailable");
+  }
+  return available;
 }
