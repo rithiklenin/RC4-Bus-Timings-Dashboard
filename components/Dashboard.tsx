@@ -480,7 +480,7 @@ export function Dashboard({ initialData = null, initialWeather = null }: { initi
       <header className="topbar">
         <div className="brand">
           <div className="brand-mark">RC<span>4</span></div>
-          <div><h1>Bus Board</h1><p>Residential College 4</p></div>
+          <div><h1>Smart Display</h1><p>Residential College 4</p></div>
         </div>
         <div className="topbar-right">
           <WeatherStrip weather={weather} />
