@@ -34,6 +34,29 @@ describe("Blob Dining auth", () => {
     blob.get.mockImplementationOnce(async (_path: string, options: object) => { expect(options).toMatchObject({ token: "blob-secret" }); return null; });
     await expect(getDiningAuthStatus()).resolves.toEqual({ connected: false });
   });
+  it.each([
+    ["unpadded base64", key.replace(/=+$/, "")],
+    ["base64url", key.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")],
+    ["a quoted Vercel value", `  "${key}"  `],
+    ["64-character hex", Buffer.alloc(32, 7).toString("hex")],
+  ])("accepts %s encryption keys", async (_label, configuredKey) => {
+    process.env.DINING_AUTH_ENCRYPTION_KEY = configuredKey;
+    await expect(getDiningAuthStatus()).resolves.toEqual({ connected: false });
+  });
+  it("falls back to a Blob-token-derived key for malformed or incorrectly sized keys", async () => {
+    process.env.DINING_AUTH_ENCRYPTION_KEY = "not a key";
+    await storeDiningAuth({ accessToken: "fallback-one", userId: 1 });
+    await expect(getDiningAuthStatus()).resolves.toMatchObject({ connected: true });
+    blob.data = undefined;
+    process.env.DINING_AUTH_ENCRYPTION_KEY = Buffer.alloc(31, 7).toString("base64");
+    await storeDiningAuth({ accessToken: "fallback-two", userId: 2 });
+    await expect(getDiningAuthStatus()).resolves.toMatchObject({ connected: true });
+  });
+  it("falls back to a Blob-token-derived key when the dedicated key is absent", async () => {
+    delete process.env.DINING_AUTH_ENCRYPTION_KEY;
+    await storeDiningAuth({ accessToken: "fallback", userId: 3 });
+    await expect(getDiningAuthStatus()).resolves.toMatchObject({ connected: true });
+  });
   it("persists refresh and retains an omitted refresh token", async () => {
     await storeDiningAuth({ accessToken: "old", accessTokenExpireInSeconds: 0, refreshToken: "keep", userId: 1 });
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input).endsWith("RefreshToken")
@@ -42,8 +65,8 @@ describe("Blob Dining auth", () => {
     expect(blob.put).toHaveBeenCalledTimes(2); expect(await getDiningAuthStatus()).toMatchObject({ connected: true });
   });
   it("rejects missing config, corrupt ciphertext and storage errors", async () => {
-    delete process.env.DINING_AUTH_ENCRYPTION_KEY;
-    await expect(getDiningAuthStatus()).rejects.toThrow("not configured"); process.env.DINING_AUTH_ENCRYPTION_KEY = key;
+    delete process.env.DINING_NONPROD_BLOB_READ_WRITE_TOKEN;
+    await expect(getDiningAuthStatus()).rejects.toThrow("not configured"); process.env.DINING_NONPROD_BLOB_READ_WRITE_TOKEN = "blob-secret";
     blob.data = JSON.stringify({ version: 1, nonce: Buffer.alloc(12).toString("base64"), tag: Buffer.alloc(16).toString("base64"), ciphertext: "eA==" });
     await expect(getDiningAuthStatus()).rejects.toThrow("Unable to read Dining session");
     blob.get.mockRejectedValueOnce(new Error("credential leaked")); await expect(getDiningAuthStatus()).rejects.toThrow("Unable to read Dining session");

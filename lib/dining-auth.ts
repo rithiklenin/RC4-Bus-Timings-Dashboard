@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { del, get, put } from "@vercel/blob";
 
 const DINING_API_BASE = "https://inetapps.nus.edu.sg/mnusds/api/";
@@ -12,14 +12,51 @@ export interface DiningAuthResult {
   refreshToken?: string; refreshTokenExpireInSeconds?: number; roleName?: string; safeRequestId?: string; userId: number;
 }
 interface DiningAuthSession extends DiningAuthResult { accessTokenExpiresAt: number; connectedAt: number; refreshTokenExpiresAt?: number }
+
+const ENCRYPTION_KEY_ERROR = "DINING_AUTH_ENCRYPTION_KEY must encode exactly 32 bytes (base64, base64url, or 64-character hex)";
+const BLOB_KEY_SALT = "rc4-bus-timings-dashboard/dining-auth/v1";
+
+function encryptionKey(value: string) {
+  let encoded = value.trim();
+  const quoted = (encoded.startsWith('"') && encoded.endsWith('"')) || (encoded.startsWith("'") && encoded.endsWith("'"));
+  if (quoted) encoded = encoded.slice(1, -1).trim();
+
+  if (/^[0-9a-f]{64}$/i.test(encoded)) return Buffer.from(encoded, "hex");
+
+  const compact = encoded.replace(/\s/g, "");
+  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(compact)) {
+    throw new DiningAuthError(ENCRYPTION_KEY_ERROR, "configuration");
+  }
+
+  const standard = compact.replace(/-/g, "+").replace(/_/g, "/");
+  if (standard.length % 4 === 1) throw new DiningAuthError(ENCRYPTION_KEY_ERROR, "configuration");
+  const padded = standard.padEnd(Math.ceil(standard.length / 4) * 4, "=");
+  const key = Buffer.from(padded, "base64");
+  const canonicalInput = padded.replace(/=+$/, "");
+  const canonicalKey = key.toString("base64").replace(/=+$/, "");
+  if (key.length !== 32 || canonicalInput !== canonicalKey) {
+    throw new DiningAuthError(ENCRYPTION_KEY_ERROR, "configuration");
+  }
+  return key;
+}
+
+function blobDerivedEncryptionKey(token: string) {
+  return Buffer.from(hkdfSync("sha256", token, BLOB_KEY_SALT, "aes-256-gcm", 32));
+}
+
 function config() {
   const token = process.env.VERCEL_ENV === "production"
     ? process.env.BLOB_READ_WRITE_TOKEN
     : process.env.DINING_NONPROD_BLOB_READ_WRITE_TOKEN;
+  if (!token) throw new DiningAuthError("Dining Blob persistence is not configured", "configuration");
   const encoded = process.env.DINING_AUTH_ENCRYPTION_KEY;
-  if (!token || !encoded) throw new DiningAuthError("Dining persistence is not configured", "configuration");
-  const key = Buffer.from(encoded, "base64");
-  if (key.length !== 32 || key.toString("base64") !== encoded) throw new DiningAuthError("Dining encryption configuration is invalid", "configuration");
+  let key: Buffer;
+  try {
+    key = encoded ? encryptionKey(encoded) : blobDerivedEncryptionKey(token);
+  } catch (error) {
+    if (!(error instanceof DiningAuthError)) throw error;
+    key = blobDerivedEncryptionKey(token);
+  }
   return { token, key };
 }
 const validSession = (s: unknown): s is DiningAuthSession => {
