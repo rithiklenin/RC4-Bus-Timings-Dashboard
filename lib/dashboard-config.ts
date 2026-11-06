@@ -3,7 +3,7 @@ export const DASHBOARD_CONFIG = {
   arrivalsRefreshMs: 20_000,
   weatherRefreshMs: 300_000,
   diningMenuRefreshMs: 15 * 60_000,
-  diningUnavailableDelayMs: 3_000,
+  diningUnavailableDelayMs: 8_000,
   cscContentRefreshMs: 15_000,
   publicityRotationMs: 60_000,
   publicStopRotationMs: 15_000,
