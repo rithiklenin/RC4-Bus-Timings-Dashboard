@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { getAdminUser } from "@/lib/admin-auth";
 import { storeDiningAuth, type DiningAuthResult } from "@/lib/dining-auth";
 import { diningErrorResponse } from "@/lib/dining-responses";
 import { readPendingDiningLogin } from "@/lib/dining-login";
@@ -15,6 +16,7 @@ interface DiningAuthPayload {
 }
 
 export async function POST(request: Request) {
+  if (!await getAdminUser()) return NextResponse.json({ error: "Admin login required" }, { status: 401 });
   const body = await request.json().catch(() => null) as { callbackUrl?: string } | null;
   if (!body?.callbackUrl) {
     return NextResponse.json({ error: "Paste the final NUS callback URL" }, { status: 400, headers: { "Cache-Control": "private, no-store" } });

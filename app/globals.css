@@ -126,6 +126,8 @@ button, input { font: inherit; }
 .dining-empty { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 18px 4px; border-top: 1px solid var(--line); color: var(--muted); text-align: center; }
 .dining-empty .status-dot { flex: 0 0 auto; background: var(--amber); box-shadow: 0 0 8px var(--amber); }
 .dining-empty strong { font: 600 clamp(16px,1.1vw,21px)/1.2 "Space Grotesk", sans-serif; }
+.dining-spinner { width: 18px; height: 18px; flex: 0 0 auto; border: 2px solid rgba(91,225,210,.2); border-top-color: var(--cyan); border-radius: 50%; animation: dining-spin .8s linear infinite; }
+@keyframes dining-spin { to { transform: rotate(360deg); } }
 .stop-header { display: flex; gap: 12px; flex-shrink: 0; align-items: flex-start; justify-content: space-between; margin-bottom: clamp(20px,2.1vw,38px); }
 .stop-secondary .stop-header { margin-bottom: 16px; }
 .eyebrow { color: var(--cyan); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .16em; margin-bottom: 9px; }

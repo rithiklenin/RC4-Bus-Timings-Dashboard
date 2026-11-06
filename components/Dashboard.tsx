@@ -320,9 +320,13 @@ function PublicStopRotator({ stops, source }: { stops: BusStop[]; source: Source
 
 function DiningPanel() {
   const [diningMenu, setDiningMenu] = useState<DiningMenuResponse | null>(null);
+  const [diningState, setDiningState] = useState<"loading" | "ready" | "unavailable">("loading");
 
   useEffect(() => {
     let cancelled = false;
+    const unavailableTimer = window.setTimeout(() => {
+      if (!cancelled) setDiningState((current) => current === "loading" ? "unavailable" : current);
+    }, DASHBOARD_CONFIG.diningUnavailableDelayMs);
     const loadMenu = async () => {
       try {
         const response = await fetch("/api/dining-menu", { cache: "no-store" });
@@ -330,15 +334,17 @@ function DiningPanel() {
         const menu = await response.json() as DiningMenuResponse;
         if (!cancelled) {
           setDiningMenu(menu);
+          setDiningState("ready");
         }
       } catch {
-        if (!cancelled) setDiningMenu(null);
+        // Keep showing the loading grace period, or retain the last valid menu after a refresh failure.
       }
     };
     void loadMenu();
     const refresh = window.setInterval(() => void loadMenu(), DASHBOARD_CONFIG.diningMenuRefreshMs);
     return () => {
       cancelled = true;
+      window.clearTimeout(unavailableTimer);
       window.clearInterval(refresh);
     };
   }, []);
@@ -360,7 +366,7 @@ function DiningPanel() {
       <header className="stop-header">
         <div>
           <div className="eyebrow">Dining hall{panelMeal ? ` · ${panelMeal}` : ""}</div>
-          <h2>{diningMenu?.dateLabel ?? "Not connected"}</h2>
+          <h2>{diningMenu?.dateLabel ?? (diningState === "loading" ? "Loading menu…" : "Not connected")}</h2>
         </div>
         {diningMenu && <div className="dining-dots" aria-label="Select dining menu page">
           {pages.map((page, index) => (
@@ -389,6 +395,9 @@ function DiningPanel() {
               </ul>
             </div>
           ))}
+        </div> : diningState === "loading" ? <div className="dining-empty dining-loading" role="status">
+          <span className="dining-spinner" aria-hidden="true" />
+          <strong>Loading dining menu…</strong>
         </div> : <div className="dining-empty">
           <span className="status-dot" />
           <strong>NUS Dining Hall API not connected</strong>

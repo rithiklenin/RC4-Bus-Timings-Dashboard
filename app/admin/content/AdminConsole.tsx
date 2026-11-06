@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { DEFAULT_CSC_CONTENT, type CscContentItem, type CscContentResponse } from "@/lib/csc-content";
 import { readJsonResponse } from "@/lib/response-json";
@@ -16,7 +17,7 @@ type ConsoleSection = "highlights" | "dining";
 
 const FIELD_LIMITS = { eyebrow: 32, title: 64, description: 180, note: 80 } as const;
 
-export default function AdminConsole() {
+export default function AdminConsole({ adminEmail }: { adminEmail: string }) {
   const [section, setSection] = useState<ConsoleSection>("highlights");
   const [items, setItems] = useState<CscContentItem[]>(DEFAULT_CSC_CONTENT.map((item) => ({ ...item })));
   const [activeIndex, setActiveIndex] = useState(0);
@@ -39,21 +40,18 @@ export default function AdminConsole() {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([
-      fetch("/api/csc-content", { cache: "no-store" }).then((response) => response.json() as Promise<CscContentResponse>),
-      fetch("/api/dining-auth/status", { cache: "no-store" }).then(async (response) => {
-        const result = await readJsonResponse<DiningAuthStatus & { error?: string }>(response, "Unable to read Dining connection status");
-        if (!response.ok) throw new Error(result.error ?? "Unable to read Dining connection status");
-        return result;
-      }),
-    ]).then(([content, dining]) => {
-      if (!cancelled) {
-        setItems(content.items);
-        setDiningStatus(dining);
-      }
+    void fetch("/api/csc-content", { cache: "no-store" }).then(async (response) => {
+      const content = await readJsonResponse<CscContentResponse & { error?: string }>(response, "Unable to load highlights");
+      if (!response.ok) throw new Error(content.error ?? "Unable to load highlights");
+      if (!cancelled) setItems(content.items);
+    }).catch((error: unknown) => { if (!cancelled) setContentMessage(error instanceof Error ? error.message : "Unable to load highlights"); });
+    void fetch("/api/dining-auth/status", { cache: "no-store" }).then(async (response) => {
+      const result = await readJsonResponse<DiningAuthStatus & { error?: string }>(response, "Unable to read Dining connection status");
+      if (!response.ok) throw new Error(result.error ?? "Unable to read Dining connection status");
+      if (!cancelled) setDiningStatus(result);
     }).catch((error: unknown) => { if (!cancelled) setDiningMessage(error instanceof Error ? error.message : "Unable to load Dining status"); });
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshDiningStatus]);
 
   function updateItem(field: keyof Pick<CscContentItem, "eyebrow" | "title" | "description" | "note">, value: string) {
     setItems((current) => current.map((item, index) => index === activeIndex ? { ...item, [field]: value } : item));
@@ -73,7 +71,7 @@ export default function AdminConsole() {
       const result = await response.json() as CscContentResponse & { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Unable to save highlights");
       setItems(result.items);
-      setContentMessage("Saved. The dashboard will pick up these changes automatically.");
+      setContentMessage("Published. The dashboard will pick up these changes automatically.");
     } catch (error) {
       setContentMessage(error instanceof Error ? error.message : "Unable to save highlights");
     } finally {
@@ -142,7 +140,7 @@ export default function AdminConsole() {
   return (
     <main className={styles.consoleShell}>
       <header className={styles.consoleHeader}>
-        <div className={styles.consoleBrand}><span>RC4</span><div><strong>Dashboard admin</strong><small>Mock NUS session</small></div></div>
+        <div className={styles.consoleBrand}><span>RC4</span><div><strong>Dashboard admin</strong><small>{adminEmail}</small></div></div>
         <div className={styles.headerActions}>
           <Link href="/">View dashboard</Link>
           <form action="/api/admin-auth/logout" method="post"><button type="submit">Sign out</button></form>
@@ -155,13 +153,13 @@ export default function AdminConsole() {
             <button className={section === "highlights" ? styles.navActive : ""} onClick={() => setSection("highlights")} type="button"><i>✦</i><span>RC4 highlights<small>Edit rotating CSC content</small></span></button>
             <button className={section === "dining" ? styles.navActive : ""} onClick={() => setSection("dining")} type="button"><i>⌁</i><span>Dining connection<small>Connect the live menu API</small></span></button>
           </div>
-          <p>Prototype changes are stored in the running server and reset when it restarts.</p>
+          <p>Published highlights are saved to durable Blob storage and appear on the public dashboard automatically.</p>
         </aside>
 
         <section className={styles.consoleMain}>
           {section === "highlights" ? (
             <>
-              <div className={styles.sectionHeading}><div><span>Content manager</span><h1>RC4 highlights</h1><p>Edit the three cards that rotate on the public dashboard.</p></div><button className={styles.saveTop} disabled={contentBusy} form="highlight-form" type="submit">{contentBusy ? "Saving…" : "Save changes"}</button></div>
+              <div className={styles.sectionHeading}><div><span>Content manager</span><h1>RC4 highlights</h1><p>Edit the three cards that rotate on the public dashboard.</p></div></div>
               <div className={styles.editorTabs} role="tablist" aria-label="Highlight cards">
                 {items.map((item, index) => <button role="tab" aria-selected={index === activeIndex} className={index === activeIndex ? styles.editorTabActive : ""} onClick={() => setActiveIndex(index)} type="button" key={item.id}><span>{index + 1}</span><div>{item.title}<small>{item.eyebrow}</small></div></button>)}
               </div>
@@ -171,7 +169,7 @@ export default function AdminConsole() {
                   <Field label="Headline" value={activeItem.title} limit={FIELD_LIMITS.title} onChange={(value) => updateItem("title", value)} />
                   <Field label="Description" value={activeItem.description} limit={FIELD_LIMITS.description} multiline onChange={(value) => updateItem("description", value)} />
                   <Field label="Footer note" value={activeItem.note} limit={FIELD_LIMITS.note} onChange={(value) => updateItem("note", value)} />
-                  <div className={styles.formFooter}><button disabled={contentBusy} type="submit">{contentBusy ? "Saving…" : "Save all highlights"}</button>{contentMessage && <span role="status">{contentMessage}</span>}</div>
+                  <div className={styles.formFooter}><button disabled={contentBusy} type="submit">{contentBusy ? "Publishing…" : "Publish all highlights"}</button>{contentMessage && <span role="status">{contentMessage}</span>}</div>
                 </form>
                 <aside className={styles.previewWrap}><span>Live preview</span><div className={styles.highlightPreview}><small>{activeItem.eyebrow}</small><h2>{activeItem.title}</h2><p>{activeItem.description}</p><strong>{activeItem.note}</strong><div><i /><i /><i /></div></div><p>Text updates in real time. Saving publishes all three cards to this running dashboard.</p></aside>
               </div>
@@ -183,8 +181,16 @@ export default function AdminConsole() {
                 <div className={`${styles.connectionStatus} ${diningStatus.connected ? styles.connectionLive : ""}`}><i /><div><strong>{diningStatus.connected ? "Connected" : "Not connected"}</strong><span>{diningStatus.connected ? diningStatus.fullName ?? diningStatus.email ?? "NUS Dining account" : "Live menu requests are currently disabled"}</span></div></div>
                 {!diningStatus.connected ? <div className={styles.diningSteps}>
                   <div className={styles.step}><b>1</b><div><strong>Open NUS sign-in</strong><p>Use the official NUS page in a new tab.</p><a href="/api/dining-auth/start" target="_blank" rel="noreferrer">Sign in with NUS ↗</a></div></div>
-                  <div className={styles.step}><b>2</b><form onSubmit={completeDiningLogin}><label htmlFor="callback-url">Paste the final callback URL</label><p>After NUS finishes, copy the complete URL from the address bar.</p><textarea id="callback-url" value={callbackUrl} onChange={(event) => setCallbackUrl(event.target.value)} placeholder="https://inetapps.nus.edu.sg/nusds/login/student?code=…" rows={4} required spellCheck={false} /><button disabled={diningBusy} type="submit">{diningBusy ? "Connecting…" : "Connect dining menu"}</button></form></div>
-                </div> : <div className={styles.connectedActions}><Link href="/">View live menu</Link><button disabled={diningBusy} onClick={verifyDining} type="button">{diningBusy ? "Checking…" : "Verify connection"}</button><button onClick={disconnectDining} type="button">Disconnect</button></div>}
+                  <div className={styles.step}><b>2</b><form onSubmit={completeDiningLogin}><label htmlFor="callback-url">Copy the complete URL in your browser</label><p>After NUS finishes, select and copy the full URL from your browser&apos;s address bar, then paste it below.</p><Image className={styles.callbackGuideImage} src="/admin/copy-dining-callback-url.png" alt="Browser address bar with the complete NUS Dining callback URL selected" width={1754} height={897} priority /><textarea id="callback-url" value={callbackUrl} onChange={(event) => setCallbackUrl(event.target.value)} placeholder="https://inetapps.nus.edu.sg/nusds/login/student?code=…" rows={4} required spellCheck={false} /><button disabled={diningBusy} type="submit">{diningBusy ? "Connecting…" : "Connect dining menu"}</button></form></div>
+                </div> : <>
+                  <div className={styles.connectedActions}><Link href="/">View live menu</Link><button disabled={diningBusy} onClick={verifyDining} type="button">{diningBusy ? "Checking…" : "Verify connection"}</button><button onClick={disconnectDining} type="button">Disconnect</button></div>
+                  <details className={styles.recoveryGuide}>
+                    <summary>If the Dining connection stops working</summary>
+                    <ol><li>Select <strong>Verify connection</strong>.</li><li>If verification fails, select <strong>Disconnect</strong>.</li><li>Select <strong>Sign in with NUS</strong> and complete the login.</li><li>Copy the complete URL in your browser and paste it into the admin page.</li><li>Select <strong>Connect dining menu</strong>, then check the dashboard.</li></ol>
+                    <Image className={styles.callbackGuideImage} src="/admin/copy-dining-callback-url.png" alt="Browser address bar with the complete NUS Dining callback URL selected" width={1754} height={897} />
+                    <p>Always start a fresh login. Old callback URLs cannot be reused.</p>
+                  </details>
+                </>}
                 {diningMessage && <div className={styles.consoleMessage} role="status">{diningMessage}</div>}
               </section>
             </>

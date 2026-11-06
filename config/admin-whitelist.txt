@@ -1,0 +1,11 @@
+# Prototype admin email whitelist
+# Add one approved NUS email per line, then redeploy.
+# Lines beginning with # are ignored.
+#
+# Example:
+# raihan@u.nus.edu
+e1115710@u.nus.edu
+wangyixuan818@gmail.com
+rithiklenin@gmail.com
+AlanAi161616@gmail.com
+scormonhors@gmail.com

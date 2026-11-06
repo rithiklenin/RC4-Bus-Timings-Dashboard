@@ -17,7 +17,9 @@ The dining panel measures the space available for its menu. It shows two stalls 
 
 ## Dining menu prototype
 
-Open [`/admin`](http://localhost:3000/admin) to enter the prototype admin console. The mock NUS login does not request credentials and is isolated behind `lib/admin-auth.ts` so an official NUS authentication provider can replace it later. The console also edits the three rotating CSC highlight cards; saved content is held by the running server and the dashboard checks for updates every 15 seconds.
+Open [`/admin`](http://localhost:3000/admin) to enter the prototype admin console. Approved addresses are listed one per line in `config/admin-whitelist.txt`; changing the list requires a redeployment. Entering an approved email creates an eight-hour signed, HTTP-only session using the existing private Blob token as signing key material. This prototype checks only whether the address is listed and does not verify email ownership, so it must not be treated as production authentication. The console edits the three rotating CSC highlight cards; published content is stored as one JSON document in the existing private Vercel Blob store, and the dashboard checks for updates every 15 seconds.
+
+See the brief [admin guide](docs/admin-guide.md) for the user-testing workflow.
 
 From the **Dining connection** section, complete the NUS Dining connection before testing the live RC4 menu card. The current Dining App login flow returns to a fixed NUS callback URL, so the prototype asks you to paste that final URL back into the admin console. It validates the saved login state, exchanges the callback, and stores the session encrypted in a private Vercel Blob store.
 
