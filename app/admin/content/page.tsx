@@ -1,10 +1,11 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ADMIN_AUTH_COOKIE, isValidAdminSession } from "@/lib/admin-auth";
+import { getAdminUser } from "@/lib/admin-auth";
 import AdminConsole from "./AdminConsole";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminContentPage() {
-  const cookieStore = await cookies();
-  if (!isValidAdminSession(cookieStore.get(ADMIN_AUTH_COOKIE)?.value)) redirect("/admin/login");
-  return <AdminConsole />;
+  const user = await getAdminUser();
+  if (!user) redirect("/admin/login");
+  return <AdminConsole adminEmail={user.email ?? "Approved administrator"} />;
 }

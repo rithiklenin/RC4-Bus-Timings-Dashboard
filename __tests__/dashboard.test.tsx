@@ -59,12 +59,21 @@ describe("Dashboard", () => {
     }
   });
 
-  it("clearly shows when NUS Dining is not connected without sample dishes", () => {
-    const menu = within(within(render(<Dashboard initialData={snapshot} />).container).getByLabelText("Dining hall menu"));
-    expect(menu.getByText("Not connected", { selector: "h2" })).toBeInTheDocument();
-    expect(menu.getByText("NUS Dining Hall API not connected")).toBeInTheDocument();
-    expect(menu.queryByText("Malay")).not.toBeInTheDocument();
-    expect(menu.queryByRole("link")).not.toBeInTheDocument();
+  it("shows a loading state before reporting that NUS Dining is not connected", () => {
+    vi.useFakeTimers();
+    try {
+      const menu = within(within(render(<Dashboard initialData={snapshot} />).container).getByLabelText("Dining hall menu"));
+      expect(menu.getByText("Loading menu…", { selector: "h2" })).toBeInTheDocument();
+      expect(menu.getByText("Loading dining menu…")).toBeInTheDocument();
+      expect(menu.queryByText("NUS Dining Hall API not connected")).not.toBeInTheDocument();
+
+      act(() => vi.advanceTimersByTime(DASHBOARD_CONFIG.diningUnavailableDelayMs));
+      expect(menu.getByText("Not connected", { selector: "h2" })).toBeInTheDocument();
+      expect(menu.getByText("NUS Dining Hall API not connected")).toBeInTheDocument();
+      expect(menu.queryByText("Malay")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("allows a dining menu page to be selected manually", async () => {

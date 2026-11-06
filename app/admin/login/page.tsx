@@ -1,14 +1,15 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ADMIN_AUTH_COOKIE, ADMIN_AUTH_PROVIDER, isValidAdminSession } from "@/lib/admin-auth";
+import { getAdminUser, isAdminAuthConfigured } from "@/lib/admin-auth";
 import styles from "../admin.module.css";
 
 const NUS_LOGO = "https://www.nus.edu.sg/images/default-source/identity-images/fullcolorlogo.jpg";
 
-export default async function AdminLoginPage() {
-  const cookieStore = await cookies();
-  if (isValidAdminSession(cookieStore.get(ADMIN_AUTH_COOKIE)?.value)) redirect("/admin/content");
+export const dynamic = "force-dynamic";
+
+export default async function AdminLoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  if (await getAdminUser()) redirect("/admin/content");
+  const query = await searchParams;
 
   return (
     <main className={styles.loginShell}>
@@ -16,22 +17,18 @@ export default async function AdminLoginPage() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img className={styles.nusLogo} src={NUS_LOGO} alt="National University of Singapore" />
         <div className={styles.loginEyebrow}>RC4 dashboard administration</div>
-        <h1>Welcome back</h1>
-        <p>Sign in with your NUS identity to manage RC4 highlights and connect the dining hall feed.</p>
+        <h1>Admin sign-in</h1>
+        <p>Enter your approved NUS email address to continue to the prototype admin page.</p>
 
-        <form action={ADMIN_AUTH_PROVIDER.loginEndpoint} method="post">
-          <button className={styles.nusLoginButton} type="submit">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={NUS_LOGO} alt="" aria-hidden="true" />
-            <span>{ADMIN_AUTH_PROVIDER.label}</span>
-            <i aria-hidden="true">→</i>
-          </button>
+        <form className={styles.emailLoginForm} action="/api/admin-auth/login" method="post">
+          <label htmlFor="admin-email">Approved email address</label>
+          <input id="admin-email" name="email" type="email" autoComplete="email" placeholder="name@nus.edu.sg" required />
+          <button type="submit">Continue to admin page</button>
         </form>
 
-        <div className={styles.mockNotice}>
-          <strong>Prototype sign-in</strong>
-          <span>No username or password is requested. This button creates a local mock admin session.</span>
-        </div>
+        <div className={styles.loginNotice} role="note"><strong>Prototype access</strong><span>This prototype does not verify ownership of the email address. Only pre-approved NUS email addresses can access the admin page.</span></div>
+        {query.error && <div className={`${styles.loginNotice} ${styles.loginError}`} role="alert"><strong>Unable to sign in</strong><span>{query.error}</span></div>}
+        {!isAdminAuthConfigured() && <div className={`${styles.loginNotice} ${styles.loginError}`} role="alert"><strong>Setup required</strong><span>Add at least one email to the prototype admin whitelist and ensure Blob storage is connected.</span></div>}
         <Link className={styles.backLink} href="/">← Back to dashboard</Link>
       </section>
     </main>
