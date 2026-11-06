@@ -187,7 +187,7 @@ function SourceMeta({ source, label }: { source: SourceResult; label: string }) 
 
 function StopPanel({ stop, source, featured = false }: { stop: BusStop; source: SourceResult; featured?: boolean }) {
   return (
-    <section className={`stop-panel ${featured ? "stop-featured" : "stop-secondary"}`}>
+    <section className={`stop-panel bus-panel ${featured ? "stop-featured" : "stop-secondary"}`}>
       <header className="stop-header">
         <div>
           <div className="eyebrow">{stop.kind === "nus" ? "NUS internal shuttle" : `Public bus · Stop ${stop.id}`}</div>
@@ -199,7 +199,9 @@ function StopPanel({ stop, source, featured = false }: { stop: BusStop; source: 
         </div>
       </header>
       <div className="service-labels" aria-hidden="true">
-        <span>Service</span><span>Next arrivals</span><span>Capacity</span>
+        <span>Service</span>
+        <span>Next arrivals<span className="capacity-inline-label"> / capacity</span></span>
+        <span className="capacity-column-label">Capacity</span>
       </div>
       <div className="services">
         {stop.services.length ? stop.services.map((service) => (
@@ -508,7 +510,7 @@ export function Dashboard({ initialData = null, initialWeather = null }: { initi
         </div>
       </div>
 
-      <footer>
+      <footer className="dashboard-footer">
         <span><i className="legend-dot green" /> Seats</span>
         <span><i className="legend-dot amber" /> Standing</span>
         <span><i className="legend-dot red" /> Limited / full</span>
