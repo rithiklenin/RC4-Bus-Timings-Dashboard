@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DASHBOARD_CONFIG } from "@/lib/dashboard-config";
-import { paginateCuisines } from "@/lib/dining";
 import type { Cuisine } from "@/lib/dining";
+import { useDiningPages } from "@/lib/use-dining-pages";
+import { watchDeployment } from "@/lib/deployment-updates";
+import { DEPLOYMENT_VERSION } from "@/lib/deployment-version";
 import { sortDiningMenuItems, type DiningMenuResponse } from "@/lib/dining-menu-shared";
 import { DEFAULT_CSC_CONTENT, type CscContentItem, type CscContentResponse } from "@/lib/csc-content";
 import type { Arrival, ArrivalsResponse, BusService, BusStop, PsiBand, SourceResult, WeatherResponse } from "@/lib/types";
@@ -317,7 +319,6 @@ function PublicStopRotator({ stops, source }: { stops: BusStop[]; source: Source
 }
 
 function DiningPanel() {
-  const [activeIndex, setActiveIndex] = useState(0);
   const [diningMenu, setDiningMenu] = useState<DiningMenuResponse | null>(null);
 
   useEffect(() => {
@@ -342,22 +343,15 @@ function DiningPanel() {
     };
   }, []);
 
-  const pages = useMemo(() => {
+  const cuisines = useMemo(() => {
     if (!diningMenu) return [];
     const cuisines: Cuisine[] = sortDiningMenuItems(diningMenu.items).map((item) => ({
       ...item,
       vegetarian: /vegetarian|\bveg\b/i.test(item.name),
     }));
-    return paginateCuisines(cuisines);
+    return cuisines;
   }, [diningMenu]);
-
-  useEffect(() => {
-    const rotation = window.setInterval(() => {
-      setActiveIndex((current) => current + 1);
-    }, DASHBOARD_CONFIG.diningRotationMs);
-    return () => window.clearInterval(rotation);
-  }, []);
-
+  const { areaRef, pages, activeIndex, selectPage } = useDiningPages(cuisines);
   const pageIndex = pages.length ? activeIndex % pages.length : 0;
   const panelMeal = diningMenu?.mealName.toLowerCase();
 
@@ -373,27 +367,33 @@ function DiningPanel() {
             <button
               type="button"
               className={index === pageIndex ? "active" : ""}
-              aria-label={`Show ${page.map((cuisine) => cuisine.name).join(" and ")}`}
+              aria-label={`Show ${page.map((cuisine) => cuisine.name).join(" and ")}${page.some(cuisine => cuisine.continuation) ? `, continued, page ${index + 1}` : ""}`}
               aria-pressed={index === pageIndex}
-              onClick={() => setActiveIndex(index)}
-              key={page[0].name}
+              onClick={() => selectPage(index)}
+              key={page[0].id}
             />
           ))}
         </div>}
       </header>
-      {diningMenu ? <div className="dining-page" key={`${panelMeal}-${pageIndex}`}>
-        {pages[pageIndex]?.map((cuisine) => (
-          <div className="cuisine" key={cuisine.name}>
-            <h3>{cuisine.name}{cuisine.vegetarian && <span className="veg-tag">Veg</span>}</h3>
-            <ul className="dish-list">
-              {cuisine.dishes.map((dish) => <li title={dish} key={dish}>{dish}</li>)}
-            </ul>
-          </div>
-        ))}
-      </div> : <div className="dining-empty">
-        <span className="status-dot" />
-        <strong>NUS Dining Hall API not connected</strong>
-      </div>}
+      <div className="dining-menu-area" ref={areaRef}>
+        {diningMenu ? <div className="dining-page" key={`${panelMeal}-${pageIndex}`}>
+          {pages[pageIndex]?.map((cuisine) => (
+            <div className="cuisine" key={cuisine.id}>
+              <h3>
+                <span className="cuisine-name">{cuisine.name}</span>
+                {cuisine.vegetarian && <span className="veg-tag">Veg</span>}
+                {cuisine.continuation && <span className="dining-continuation">continued</span>}
+              </h3>
+              <ul className="dish-list">
+                {cuisine.dishes.map((dish, index) => <li key={`${cuisine.id}-${index}`}>{dish}</li>)}
+              </ul>
+            </div>
+          ))}
+        </div> : <div className="dining-empty">
+          <span className="status-dot" />
+          <strong>NUS Dining Hall API not connected</strong>
+        </div>}
+      </div>
       {diningMenu && <div className="source-meta source-live">
         <span className="status-dot" />
         <span>NUS Dining live</span>
@@ -410,6 +410,11 @@ export function Dashboard({ initialData = null, initialWeather = null }: { initi
   const [now, setNow] = useState(() => new Date());
   const requestActive = useRef(false);
   const lastUpstreamErrors = useRef<{ nus: string | null; publicBus: string | null }>({ nus: null, publicBus: null });
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") return;
+    return watchDeployment(DEPLOYMENT_VERSION, () => window.location.reload());
+  }, []);
 
   const refresh = useCallback(async () => {
     if (requestActive.current) return;

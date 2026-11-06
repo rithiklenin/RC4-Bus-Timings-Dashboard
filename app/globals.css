@@ -107,16 +107,22 @@ button, input { font: inherit; }
 .dining-panel { display: flex; flex-direction: column; }
 .dining-panel .eyebrow { color: var(--gold); }
 .dining-panel .source-meta { margin-top: 14px; }
-.dining-dots { display: flex; gap: 5px; padding-top: 4px; }
+.dining-dots { display: flex; flex-shrink: 0; flex-wrap: wrap; align-content: flex-start; gap: 5px; padding-top: 4px; max-width: 120px; max-height: 32px; overflow-y: auto; }
 .dining-dots button { width: 12px; height: 5px; padding: 0; border: 0; border-radius: 99px; background: rgba(255,255,255,.18); cursor: pointer; transition: width .3s ease, background .3s ease, box-shadow .3s ease; }
 .dining-dots button:hover,.dining-dots button:focus-visible { background: rgba(242,186,95,.58); outline: 2px solid rgba(242,186,95,.45); outline-offset: 3px; }
 .dining-dots button.active { width: 24px; background: var(--gold); box-shadow: 0 0 8px rgba(242,186,95,.4); }
-.dining-page { flex: 1; min-height: 0; display: grid; grid-template-rows: repeat(2, minmax(0, 1fr)); overflow: hidden; border-top: 1px solid var(--line); animation: publicity-in .55s ease-out; }
-.cuisine { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 6px 4px; border-bottom: 1px solid var(--line); min-height: 0; overflow: hidden; }
-.cuisine h3 { display: flex; align-items: center; gap: 8px; margin: 0; font: 600 clamp(16px,1.1vw,21px)/1.1 "Space Grotesk", sans-serif; letter-spacing: -.02em; }
+.dining-menu-area { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.dining-page { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); animation: publicity-in .55s ease-out; }
+.cuisine { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 6px 4px; border-bottom: 1px solid var(--line); min-width: 0; }
+.cuisine h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; font: 600 clamp(16px,1.1vw,21px)/1.1 "Space Grotesk", sans-serif; letter-spacing: -.02em; }
+.cuisine-name { min-width: 0; overflow-wrap: anywhere; }
+.dining-continuation { color: var(--muted); font: 600 10px/1.2 "DM Sans", sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.dining-measure { position: absolute; inset: 0 0 auto; flex: none; visibility: hidden; pointer-events: none; animation: none; }
+.dining-measure .cuisine { flex: none; }
 .veg-tag { padding: 3px 7px; border: 1px solid rgba(98,211,154,.35); border-radius: 99px; color: var(--green); background: rgba(98,211,154,.08); font: 700 9px/1 "DM Sans", sans-serif; text-transform: uppercase; letter-spacing: .1em; }
 .dish-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin: 0; padding: 0; list-style: none; }
-.dish-list li { min-width: 0; overflow: hidden; padding: 5px 9px; border: 1px solid var(--line); border-radius: 99px; background: rgba(255,255,255,.04); color: #d3dee8; font-size: clamp(10px,.72vw,13px); line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.dish-list li { min-width: 0; overflow-wrap: anywhere; padding: 5px 9px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.04); color: #d3dee8; font-size: clamp(10px,.72vw,13px); line-height: 1.2; }
+.dish-list li:only-child { grid-column: 1 / -1; }
 .dining-empty { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 18px 4px; border-top: 1px solid var(--line); color: var(--muted); text-align: center; }
 .dining-empty .status-dot { flex: 0 0 auto; background: var(--amber); box-shadow: 0 0 8px var(--amber); }
 .dining-empty strong { font: 600 clamp(16px,1.1vw,21px)/1.2 "Space Grotesk", sans-serif; }

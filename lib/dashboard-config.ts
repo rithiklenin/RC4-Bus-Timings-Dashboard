@@ -1,4 +1,5 @@
 export const DASHBOARD_CONFIG = {
+  deploymentCheckMs: 60_000,
   arrivalsRefreshMs: 20_000,
   weatherRefreshMs: 300_000,
   diningMenuRefreshMs: 15 * 60_000,

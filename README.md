@@ -11,6 +11,10 @@ The publicity panel rotates once per minute, and its slide indicators can be cli
 
 Dashboard intervals are configured in `lib/dashboard-config.ts`. Change `publicityRotationMs` to adjust the publicity rotation duration.
 
+Production dashboards check `/api/version` every minute and when connectivity returns. A changed build version triggers a page reload; failed checks leave the current display running. Use the stable production domain on the TV, since a deployment-specific URL always points to the same build. The TV needs one manual refresh when this feature is first deployed. Automatic reloads are disabled in `next dev`.
+
+The dining panel measures the space available for its menu. It shows two stalls together when they fit, otherwise shows one, and divides oversized menus into consecutive pages marked **continued**. Long stall and dish names wrap, and every dish remains in the rotation. Pagination is recalculated when the menu, fonts, or panel size changes.
+
 ## Dining menu prototype
 
 Open [`/admin`](http://localhost:3000/admin) to enter the prototype admin console. The mock NUS login does not request credentials and is isolated behind `lib/admin-auth.ts` so an official NUS authentication provider can replace it later. The console also edits the three rotating CSC highlight cards; saved content is held by the running server and the dashboard checks for updates every 15 seconds.
