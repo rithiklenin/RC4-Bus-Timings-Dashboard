@@ -171,6 +171,12 @@ button, input { font: inherit; }
   .dashboard-shell { height: 100vh; height: 100dvh; }
 }
 
+/* Clock digits must not resize the space beside the weather strip. */
+@media (min-width: 701px) {
+  .clock { inline-size: clamp(200px, 12.5vw, 240px); }
+  .clock strong,.clock span { white-space: nowrap; }
+}
+
 /* Let the forecast use another header row before squeezing it out. */
 @media (min-width: 701px) and (max-width: 1100px) {
   .topbar { grid-template-columns: 1fr; gap: 12px; }
